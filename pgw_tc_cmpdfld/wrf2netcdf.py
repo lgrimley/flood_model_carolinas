@@ -12,8 +12,8 @@ from hydromt_sfincs import SfincsModel, utils
 # Author: Lauren Grimley
 # Last updated: 08/21/2023
 
-path = r'Z:\users\lelise\projects\Carolinas\Chapter2\wrf_output_20231006\matt_ensmean'
-dir_out = path
+path = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\wrf_output\floyd_present_ensmembers'
+dir_out = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\met'
 
 
 for root, dirs, files in os.walk(path):
@@ -64,7 +64,7 @@ for root, dirs, files in os.walk(path):
 
             print('Done!')
 
-# fileout = 'flor_ensmean_present.nc'
+# fileout = 'floyd_ensmean_present.nc'
 # tmp = os.path.join(path) + "/*.nc"
 # dfs = xr.open_mfdataset(paths=os.path.join(tmp), combine='nested')
 

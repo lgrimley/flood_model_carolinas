@@ -190,7 +190,7 @@ if plot_max_wndspd is True:
         # Load and calculate total precipitation
         wind_u = mod.forcing['wind_u']
         wind_v = mod.forcing['wind_v']
-        wind_spd = ((wind_u ** 2) + (wind_u ** 2)) ** 0.5
+        wind_spd = ((wind_u ** 2) + (wind_v ** 2)) ** 0.5
         max_wind_spd = wind_spd.max(dim='time')
 
         # Precipitation!!!
