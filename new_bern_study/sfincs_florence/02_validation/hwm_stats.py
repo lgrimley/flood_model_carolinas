@@ -77,7 +77,7 @@ def clean_obs_coords(obs_df, source_crs, target_crs):
 
 yml = r'Z:\users\lelise\data\data_catalog.yml'
 cat = hydromt.DataCatalog(yml)
-os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs')
+os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2')
 model_root = 'nbll_40m_sbg3m_v3_eff25'
 storm = 'florence'
 mod = SfincsModel(root=model_root, mode='r', data_libs=yml)
@@ -105,11 +105,13 @@ for agency in ['usgs']:
     pts['elev_m'] = obs.max(dim='time').to_dataframe()['waterlevel'].to_list()
     pts_df = pd.concat([pts_df, pts], axis=0)
 
+bc_gages = [2092500, 2091814, 209205053]
+pts_df = pts_df[~pts_df['site_no'].isin(bc_gages)]
 gage = extract_water_level(gdf=pts_df, raster=mod.results['zsmax'].max(dim='timemax'))
 
 # Read HWM file, extract modeled water levels, calculate error
 hwm_only = hwm_to_gdf(file=(r'Z:\users\lelise\geospatial\observations\usgs_' + storm + r'_FilteredHWMs.csv'),
-                      quality=3, dst_crs=mod.crs.to_epsg())
+                      quality=3, dst_crs=mod.crs.to_epsg()).clip(mod.region)
 hwm_only = extract_water_level(gdf=hwm_only, raster=mod.results['zsmax'].max(dim='timemax'))
 
 # Merge gage and HWM
@@ -123,36 +125,48 @@ stats.to_csv('hwm_stats.csv', index=True)
 ''' Q-Q PLOTS '''
 font = {'family': 'Arial', 'size': 10}
 mpl.rc('font', **font)
-axislim = [2, 12]
-stp = 2
+axislims = [[2, 12], [2, 5]]
+stps = [2, 0.5]
 plt_qq = True
 if plt_qq is True:
-    fig, ax = plt.subplots(nrows=1, ncols=1, tight_layout=True, figsize=(3.5, 3.5))
+    fig, axs = plt.subplots(nrows=1, ncols=2, tight_layout=True, figsize=(5, 3))
+    for i in range(len(axislims)):
+        ax = axs[i]
+        axislim = axislims[i]
+        stp = stps[i]
 
-    ax.scatter(hwm['elev_m'], hwm['sfincs_m'], color='grey', s=60, edgecolors='black', alpha=1.0, marker='o', zorder=2)
+        subset = hwm[(hwm['elev_m'] > axislim[0]) & (hwm['elev_m'] <= axislim[1])]
 
-    line = mlines.Line2D([0, 1], [0, 1], color='black', alpha=0.8, linestyle='--', zorder=3)
-    transform = ax.transAxes
-    line.set_transform(transform)
-    ax.add_line(line)
+        stats = pd.DataFrame(calc_stats(observed=subset['elev_m'], modeled=subset['sfincs_m'])).T
+        stats.columns = ['mae', 'rmse', 'bias']
 
-    ax.set_ylabel('Modeled WL\n(m +NAVD88)')
-    ax.set_xlabel('Observed WL\n(m +NAVD88)')
-    ax.set_title('')
+        ax.scatter(hwm['elev_m'], hwm['sfincs_m'], color='grey', s=60, edgecolors='black', alpha=1.0, marker='o', zorder=2)
 
-    ax.set_xlim(axislim)
-    start, end = ax.get_xlim()
-    ax.xaxis.set_ticks(np.arange(start, end + 1, stp))
-    ax.set_ylim(axislim)
-    start, end = ax.get_ylim()
-    ax.yaxis.set_ticks(np.arange(start, end + 1, stp))
-    ax.grid(axis='both', alpha=0.7, zorder=-1)
+        line = mlines.Line2D([0, 1], [0, 1], color='black', alpha=0.8, linestyle='--', zorder=3)
+        transform = ax.transAxes
+        line.set_transform(transform)
+        ax.add_line(line)
 
-    ss1 = 'Bias: ' + str(stats['bias'].item())
-    ss2 = 'RMSE: ' + str(stats['rmse'].item())
-    ax.text(x=axislim[1] - 0.15, y=axislim[0] + 1, s=ss1, ha='right', va='bottom')
-    ax.text(x=axislim[1] - 0.15, y=axislim[0] + 0.1, s=ss2, ha='right', va='bottom')
+        ax.set_ylabel('Modeled WL\n(m +NAVD88)')
+        ax.set_xlabel('Observed WL\n(m +NAVD88)')
+        ax.set_title('')
 
+        ax.set_xlim(axislim)
+        start, end = ax.get_xlim()
+        ax.xaxis.set_ticks(np.arange(start, end + 1, stp))
+        ax.set_ylim(axislim)
+        start, end = ax.get_ylim()
+        ax.yaxis.set_ticks(np.arange(start, end + 1, stp))
+        ax.grid(axis='both', alpha=0.7, zorder=-1)
+
+        ss1 = 'Bias: ' + str(stats['bias'].item())
+        ss2 = 'RMSE: ' + str(stats['rmse'].item())
+        if i == 0:
+            ax.text(x=axislim[1] - 0.05, y=axislim[0] + 0.75, s=ss1, ha='right', va='bottom')
+            ax.text(x=axislim[1] - 0.05, y=axislim[0] + 0.05, s=ss2, ha='right', va='bottom')
+        else:
+            ax.text(x=axislim[1] + 0.45, y=axislim[0] + 0.20, s=ss1, ha='right', va='bottom')
+            ax.text(x=axislim[1] + 0.45, y=axislim[0] + 0.01, s=ss2, ha='right', va='bottom')
     plt.subplots_adjust(wspace=0, hspace=0)
     plt.tight_layout()
     plt.margins(x=0, y=0)

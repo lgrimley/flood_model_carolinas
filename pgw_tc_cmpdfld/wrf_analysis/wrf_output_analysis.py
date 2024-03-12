@@ -43,17 +43,56 @@ d1 = cat.get_rasterdataset('flor_ensmean_present.nc', geom=reg)
 d2 = cat.get_rasterdataset('flor_ensmean_future.nc', geom=reg)
 d1 = calc_windspd(d1)
 d2 = calc_windspd(d2)
-da = ((d2 - d1)/d1).compute()
+
+thresholds = [10, 30, 12.7, 25.4]
+vars = ['wndspd', 'wndspd', 'precip_r', 'precip_r']
+storm = 'flor'
+
+for i in range(len(vars)):
+    var = vars[i]
+    threshold = thresholds[i]
+    if var is 'wndspd':
+        units = 'm/s'
+    else:
+        units = 'mm/hr'
+    sf_mean = []
+    sf_max = []
+    for t in d1.time:
+        d1s = d1[var].sel(time=t.values)
+        d1s = d1s.where(d1s >= threshold, np.nan)
+        d2s = d2[var].sel(time=t.values, method='nearest')
+        d2s = d2s.where(d2s >= threshold, np.nan)
+        da = ((d2s - d1s) / d1s).compute()
+        sf_mean.append(da.mean(dim=['x', 'y']).item())
+        sf_max.append(da.max(dim=['x', 'y']).item())
+
+    sc_df = pd.DataFrame()
+    sc_df['datetime'] = d1.time.values
+    sc_df['sf_mean'] = sf_mean
+    sc_df['sf_max'] = sf_max
+    sc_df.set_index('datetime', inplace=True, drop=True)
+    sc_df.fillna(0.0, inplace=True)
+    sc_df = sc_df.round(decimals=3)
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(4.5, 3), tight_layout=True)
+    sc_df.plot(ax=ax, label=True, linewidth=2)
+    ax.set_ylabel(f'Domain Averaged Scale Factor for\n{var} >= {threshold} {units}')
+    ax.set_xlabel('')
+    ax.set_title(f'WRF {storm} Ensemble Mean', loc='left')
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.savefig(f'domain_avg_{var}_scaling_factor_{storm}_{threshold}.png', bbox_inches='tight', dpi=225)
+    plt.close()
 
 # Need to deal with cells that had no rain and now do have rain, infinity and nan
 
-# SPATIAL AVERAGE SCALING FACTOR OVER TIME
-# q = 0.90
-# q90 = da.quantile(q=q)
-# da_q90 = da[var].where((da[var] >= q90[var]))
-variables = ['precip_r', 'wndspd']
-da_mean = da.mean(dim=['x', 'y'])
-#da_max = da.max(dim=['x', 'y'])
+da = ((d2 - d1) / d1).compute()
+var = 'precip_r'
+
+da_sel = da[var].where(da[var] >= 25.4, np.nan)
+da_mean = da_sel.mean(dim=['x', 'y'])
+da_max = da_sel.max(dim=['x', 'y'])
+
 
 da_mean = da_mean.fillna(0.0)
 da_mean = da_mean.where(np.inf, 0.0)
@@ -61,7 +100,7 @@ da_mean = da_mean.where(np.inf, 0.0)
 fig, axs = plt.subplots(
     nrows=len(variables), ncols=1,
     figsize=(6, 8),
-    tight_layout=True,sharex=True)
+    tight_layout=True, sharex=True)
 axs = axs.flatten()
 i = 0
 for var in variables:
@@ -69,14 +108,14 @@ for var in variables:
     vmin = round(da_mean[var].min().item(), 0)
     vmax = round(da_mean[var].max().item(), 0)
     da_mean[var].plot(ax=ax, label='Domain Averaged')
-    #da_max[var].plot(ax=ax, label='Domain Max')
+    # da_max[var].plot(ax=ax, label='Domain Max')
     ax.set_ylim([vmin, vmax])
     ax.set_title('')
     i += 1
 
 plt.subplots_adjust(wspace=0, hspace=0)
 plt.margins(x=0, y=0)
-plt.savefig('flor_future_present_wrf_diff.png', bbox_inches='tight', dpi=225)
+plt.savefig('flor_future_present_wrf_diff2.png', bbox_inches='tight', dpi=225)
 plt.close()
 
 # PLOTTING TEMPORAL VARIATIONS IN VARIABLES AT POINT LOCATIONS

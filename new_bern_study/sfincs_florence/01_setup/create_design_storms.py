@@ -16,7 +16,7 @@ import datetime
 
 ''' Get future IDF curve scaling info '''
 
-os.chdir(r'Z:\users\lelise\projects\NBLL\design_storms')
+os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2\model_data\design_storms_setup')
 pf_atlas14_mm = pd.read_csv('PF_Depth_Metric_PDS.csv',
                             skiprows=13,
                             skipfooter=2)
@@ -48,6 +48,39 @@ rain_rate['datetime'] = rain_rate.index + tstart
 rain_rate.set_index('datetime', inplace=True, drop=True)
 rr_hr = rain_rate.resample(rule='h').sum()
 rr_hr.to_csv('present_24hr_designstorms_noaa_atlas14.csv', index=True)
+
+''' Future IDF curves '''
+future_idf_filepath = r'Z:\users\lelise\projects\HCFCD\design_storms\future_designstorms\data'
+proj_precip = xr.open_dataset(os.path.join(future_idf_filepath, '03_Projected-Precipitation.nc'))
+# Explore the data
+print(proj_precip['period'].data)
+print(proj_precip['ari'].data)
+# extract future precip data from center of New Bern
+lat, lon = [35.110034, -77.056639]
+da = proj_precip.sel(lon=lon, lat=lat, method='nearest')['pr_projected']
+df = da.to_pandas()
+df['500'] = 0  # Future IDF doesn't have 500-yr so set to 0
+
+# Load future relative change netcdf and plot
+rc = xr.open_dataset(os.path.join(future_idf_filepath, '01_Relative-change.nc'))
+da = rc.sel(lon=lon, lat=lat, method='nearest')['relative_change']
+df = da.to_pandas()
+fig, ax = plt.subplots(tight_layout=True, figsize=(5.5, 3))
+df.plot(ax=ax, linewidth=1.5, linestyle='-.')
+ax.set_ylabel('Relative Change (%)\n in 24-hr Total Precipitation')
+ax.set_xlabel('Future Period')
+ax.legend(title='ARI', loc='center left', bbox_to_anchor=(1, 0.5))
+plt.savefig('IDF_24hrStorm_future_relative_change_NBLL.png')
+plt.close()
+# Output scaled storm totals for future IDF curves
+round(df, 4).to_csv('nbll_aic_idf_relative_change.csv')
+
+
+# Scale NOAA Atlas 14 to get total precip for future design storms
+future_cum_precip = df.copy()
+for col in future_cum_precip.columns:
+    print(col)
+    future_cum_precip[col] = future_cum_precip[col] * pf_atlas14_mm[str(col)][pf_atlas14_mm.index == duration].item()
 
 ''' Write Design Storms Boundary Condition Files for SFINCS '''
 # Filepath to data catalog yml

@@ -23,29 +23,38 @@ from shapely.geometry import box
 yml = os.path.join(r'Z:\users\lelise\data\data_catalog.yml')
 cat = hydromt.DataCatalog(yml)
 
-os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2\design_storms')
+os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2\model_outputs')
 mod = SfincsModel(root=r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2\nbll_40m_sbg3m_v3_eff25',
                   mode='r', data_libs=yml)
 mod.read(epsg=32618)
 
-scen = ['P2yr', 'P5yr', 'P10yr', 'P25yr', 'P50yr', 'P100yr', 'P500yr',
+scen = ['P10yr', 'P100yr', 'florence'
+        # 'P2yr', 'P5yr', 'P10yr', 'P25yr', 'P50yr', 'P100yr', 'P500yr',
         # 'F2yr', 'F5yr', 'F10yr', 'F25yr', 'F50yr', 'F100yr', 'F500yr'
         ]
 
 hmax_list = []
 tmax_list = []
+hmax_sbg_list = []
 for rp in scen:
-    filepath = os.path.join(os.getcwd(), f'nbll_40m_sbg3m_v3_eff25_{rp}', 'gis', f'nbll_{rp}_max_depth_gridRes40m.tif')
+    filepath = os.path.join(os.getcwd(), f'nbll_{rp}_max_depth_gridRes40m.tif')
     hmax = cat.get_rasterdataset(filepath)
     hmax_list.append(hmax)
 
-    filepath = os.path.join(os.getcwd(), f'nbll_40m_sbg3m_v3_eff25_{rp}', 'gis', f'nbll_{rp}_tmax_hours_gridRes40m.tif')
+    # filepath = os.path.join(os.getcwd(), f'nbll_{rp}_max_depth_gridRes40m_sbg3m.tif')
+    # hmax = cat.get_rasterdataset(filepath)
+    # hmax_sbg_list.append(hmax)
+
+    filepath = os.path.join(os.getcwd(), f'nbll_{rp}_tmax_hours_gridRes40m.tif')
     tmax = cat.get_rasterdataset(filepath)
-    tmax_list.append(hmax)
+    tmax_list.append(tmax)
 
-
+scen = ['10yr', '100yr', 'Florence']
 da = xr.concat(hmax_list, dim='run')
 da['run'] = xr.IndexVariable('run', scen)
+
+# da_sbg = xr.concat(hmax_sbg_list, dim='run')
+# da_sbg['run'] = xr.IndexVariable('run', scen)
 
 dat = xr.concat(tmax_list, dim='run')
 dat['run'] = xr.IndexVariable('run', scen)
@@ -54,57 +63,69 @@ dat['run'] = xr.IndexVariable('run', scen)
 font = {'family': 'Arial', 'size': 10}
 mpl.rc('font', **font)
 
+bbox = [-77.137042, 35.013707, -77.0004, 35.148565]
+dom = mod.region.to_crs(4326).clip(bbox).to_crs(mod.crs)
+
 cmap = mpl.cm.binary
 wkt = mod.grid['dep'].raster.crs.to_wkt()
 utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
 utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
-extent = np.array(mod.region.buffer(1000).total_bounds)[[0, 2, 1, 3]]
-#city_limits = cat.get_geodataframe(r'Z:\users\lelise\projects\NBLL\geospatial\city_limits\city_limits.shp').to_crs(mod.crs)
-#extent = np.array(city_limits.buffer(1000).total_bounds)[[0, 2, 1, 3]]
+extent = np.array(dom.total_bounds)[[0, 2, 1, 3]]
+
+# city_limits = cat.get_geodataframe(r'Z:\users\lelise\projects\NBLL\geospatial\city_limits\city_limits.shp').to_crs(mod.crs)
+# extent = np.array(city_limits.buffer(1000).total_bounds)[[0, 2, 1, 3]]
+parcels = cat.get_geodataframe(r'Z:\users\lelise\projects\NBLL\geospatial\craven_parcels\nc_craven_parcels_poly.shp',
+                               bbox=bbox).to_crs(mod.crs)
+roads = cat.get_geodataframe(
+    r'Z:\users\lelise\geospatial\infrastructure\tl_2019_37_prisecroads\tl_2019_37_prisecroads.shp',
+    bbox=bbox).to_crs(mod.crs)
+
 plt_fig_hmax = True
 if plt_fig_hmax is True:
     dep = mod.grid['dep']
     fig, axs = plt.subplots(
-        nrows=4, ncols=2,
-        figsize=(5, 8),
+        nrows=1, ncols=3,
+        figsize=(6, 4),
         subplot_kw={'projection': utm},
         tight_layout=True,
         layout='constrained',
         sharex=True, sharey=True)
     axs = axs.flatten()
-    axs[7].set_visible(False)
+    # axs[7].set_visible(False)
     for i in range(len(scen)):
         ckwargs = dict(cmap='Blues', vmin=0.15, vmax=8)
         hmax = da.sel(run=scen[i])
         cs = hmax.plot(ax=axs[i],
                        add_colorbar=False,
                        zorder=2,
-                       alpha=1,
+                       alpha=0.8,
                        **ckwargs)
         # Plot background/geography layers
-        mod.region.plot(ax=axs[i], color='grey', edgecolor='none', zorder=1, alpha=1)
-        mod.region.plot(ax=axs[i], color='none', edgecolor='black', linewidth=0.5,
-                        linestyle='-', zorder=3, alpha=1)
+        mod.region.plot(ax=axs[i], color='grey', edgecolor='none', zorder=0, alpha=1)
+        mod.region.plot(ax=axs[i], color='none', edgecolor='black', linewidth=1,
+                        linestyle='-', zorder=0, alpha=1)
+        parcels.plot(ax=axs[i], color='none', edgecolor='black', linewidth=0.15,
+                     linestyle='-', zorder=1, alpha=0.7)
 
-        minx, miny, maxx, maxy = mod.region.total_bounds
+        minx, miny, maxx, maxy = extent
         axs[i].set_xlim(minx, maxx)
         axs[i].set_ylim(miny, maxy)
         axs[i].set_extent(extent, crs=utm)
         axs[i].set_title('')
         axs[i].set_title((scen[i]), loc='Center')
-        if i in [0, 2, 4, 6]:
+        if i in [0]:
             axs[i].set_ylabel(f"Y Coord UTM {utm_zone} (m)")
             axs[i].yaxis.set_visible(True)
-        if i in [5, 6]:
-            axs[i].set_xlabel(f"X Coord UTM {utm_zone} (m)")
-            axs[i].xaxis.set_visible(True)
+
+        axs[i].set_xlabel(f"X Coord UTM {utm_zone} (m)")
+        axs[i].xaxis.set_visible(True)
 
         axs[i].ticklabel_format(style='sci', useOffset=False)
         axs[i].set_aspect('equal')
 
     # Colorbar
-    pos1 = axs[7].get_position()  # get the original position
-    cbar_ax = fig.add_axes([pos1.x1 + 0.01, pos1.y0 + pos1.height * 1, 0.02, pos1.height * 1.5])
+    pos1 = axs[2].get_position()  # get the original position
+    cbar_ax = fig.add_axes([pos1.x1 + 0.01, pos1.y0 + pos1.height * 0.1, 0.02, pos1.height * .8])
     cb = fig.colorbar(cs,
                       cax=cbar_ax,
                       shrink=0.7,
@@ -125,28 +146,38 @@ plt_fig_tmax = True
 if plt_fig_tmax is True:
     dep = mod.grid['dep']
     fig, axs = plt.subplots(
-        nrows=4, ncols=2,
-        figsize=(5, 8),
+        nrows=2, ncols=2,
+        figsize=(5, 6),
         subplot_kw={'projection': utm},
         tight_layout=True,
         layout='constrained',
         sharex=True, sharey=True)
     axs = axs.flatten()
-    axs[7].set_visible(False)
+    axs[3].set_visible(False)
     for i in range(len(scen)):
-        ckwargs = dict(cmap='jet', vmin=0.5, vmax=8.5)
-        tmax = dat.sel(run=scen[i])
-        cs = tmax.plot(ax=axs[i],
-                       add_colorbar=False,
-                       zorder=2,
-                       alpha=1,
-                       **ckwargs)
+        if i in [0, 1]:
+            ckwargs = dict(cmap='winter_r', vmin=0.5, vmax=24)
+            tmax = dat.sel(run=scen[i])
+            cs1 = tmax.plot(ax=axs[i],
+                            add_colorbar=False,
+                            zorder=2,
+                            alpha=0.8,
+                            **ckwargs)
+        else:
+            ckwargs = dict(cmap='winter_r', vmin=0.5, vmax=23)
+            tmax = dat.sel(run=scen[i]) / 24
+            cs2 = tmax.plot(ax=axs[i],
+                            add_colorbar=False,
+                            zorder=2,
+                            alpha=0.8,
+                            **ckwargs)
         # Plot background/geography layers
         mod.region.plot(ax=axs[i], color='lightgrey', edgecolor='none', zorder=1, alpha=0.8)
         mod.region.plot(ax=axs[i], color='none', edgecolor='black', linewidth=0.5,
                         linestyle='-', zorder=3, alpha=1)
-
-        minx, miny, maxx, maxy = mod.region.total_bounds
+        roads.plot(ax=axs[i], color='black', edgecolor='none', linewidth=0.75,
+                   linestyle='-', zorder=3, alpha=1)
+        minx, miny, maxx, maxy = extent
         axs[i].set_xlim(minx, maxx)
         axs[i].set_ylim(miny, maxy)
         axs[i].set_extent(extent, crs=utm)
@@ -155,32 +186,42 @@ if plt_fig_tmax is True:
         if i in [0, 2, 4, 6]:
             axs[i].set_ylabel(f"Y Coord UTM {utm_zone} (m)")
             axs[i].yaxis.set_visible(True)
-        if i in [5, 6]:
+        if i in [1, 2]:
             axs[i].set_xlabel(f"X Coord UTM {utm_zone} (m)")
             axs[i].xaxis.set_visible(True)
 
         axs[i].ticklabel_format(style='sci', useOffset=False)
         axs[i].set_aspect('equal')
-
     # Colorbar
-    pos1 = axs[7].get_position()  # get the original position
-    cbar_ax = fig.add_axes([pos1.x1 + 0.01, pos1.y0 + pos1.height * 1, 0.02, pos1.height * 1.5])
-    cb = fig.colorbar(cs,
+    pos1 = axs[1].get_position()  # get the original position
+    cbar_ax = fig.add_axes([pos1.x1 + 0.01, pos1.y0 + pos1.height * .1, 0.02, pos1.height * 0.8])
+    cb = fig.colorbar(cs1,
                       cax=cbar_ax,
                       shrink=0.7,
                       extend='max',
                       spacing='uniform',
-                      label='Time of Inundation (hours)',
+                      label='Time of Inundation\n(hours)',
                       pad=0,
                       aspect=30
                       )
+    # Colorbar
+    pos1 = axs[2].get_position()  # get the original position
+    cbar_ax = fig.add_axes([pos1.x1 + 0.08, pos1.y0 + pos1.height * .1, 0.02, pos1.height * 0.8])
+    cb2 = fig.colorbar(cs2,
+                       cax=cbar_ax,
+                       shrink=0.7,
+                       extend='max',
+                       spacing='uniform',
+                       label='Time of Inundation\n(days)',
+                       pad=0,
+                       aspect=30
+                       )
     # Save and close plot
     plt.gca().ticklabel_format(axis='x', style='sci', scilimits=(0, 0))
     plt.subplots_adjust(wspace=0.05, hspace=0.2)
     plt.margins(x=0, y=0)
     plt.savefig('design_storm_tmax.png', dpi=225, bbox_inches="tight")
     plt.close()
-
 
 # ''' Plotting Florence '''
 # plt_floodmap_indvidiual = True
