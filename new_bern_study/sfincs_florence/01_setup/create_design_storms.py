@@ -17,10 +17,12 @@ import datetime
 ''' Get future IDF curve scaling info '''
 
 os.chdir(r'Z:\users\lelise\projects\NBLL\sfincs\nbll_model_v2\model_data\design_storms_setup')
+# Load CSV downloaded from NOAA PFQ website
 pf_atlas14_mm = pd.read_csv('PF_Depth_Metric_PDS.csv',
                             skiprows=13,
                             skipfooter=2)
 pf_atlas14_mm.columns = pf_atlas14_mm.columns.str.replace(' ', '')
+# Duration of the design storms in minutes
 pf_atlas14_mm['durations_min'] = [5, 10, 15, 30, 60,
                                   120, 180, 360, 720, 1440,
                                   2880, 4320, 5760, 10080, 14400, 28800, 43200, 64800, 86400]
@@ -28,6 +30,7 @@ pf_atlas14_mm.set_index('durations_min', drop=True, inplace=True)
 pf_atlas14_mm.drop(columns=['bydurationforARI(years):'], inplace=True)
 
 # Create SCS Type3 hyetographs
+# Load the SCS Type 3 curve
 scsType3 = pd.read_csv('scs_type3.csv')
 scsType3['time (hr)'] = pd.to_timedelta(scsType3['time (hr)'], unit='hour')
 scsType3.set_index('time (hr)', inplace=True, drop=True)
