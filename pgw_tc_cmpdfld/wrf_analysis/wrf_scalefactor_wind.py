@@ -55,7 +55,8 @@ def fit_expon_dist(data, lower_threshold, upper_threshold, nbins):
     return loc, scale, popt, pcov
 
 
-def empirical_stats_and_curvefit(runs_dict, variable, lower_threshold, upper_threshold, bin_size, bbox=None):
+def empirical_stats_and_curvefit(runs_dict, variable, lower_threshold, upper_threshold, bin_size,
+                                 masks=None, bbox=None):
     # Histogram details
     bin_edges = np.arange(lower_threshold, upper_threshold, bin_size)
     nbins = len(bin_edges)
@@ -70,19 +71,31 @@ def empirical_stats_and_curvefit(runs_dict, variable, lower_threshold, upper_thr
     storms = list(histogram_data.keys())
     climates = list(histogram_data[storms[0]].keys())
 
+    counter = 0
     for storm in storms:
         print(storm)
+
         for climate in climates:
             print(climate)
+
             runs = runs_dict[storm][climate].keys()
             for run in runs:
                 print(run)
+
                 # Load in the data for the subplot and fit distribution
-                data = runs_dict[storm][climate][run][variable]
+                run_data = runs_dict[storm][climate][run][variable]
+
+                # Clip/mask data
+                if masks is not None:
+                    run_data = run_data.where(masks[counter])
+
                 if bbox is not None:
                     minx, miny, maxx, maxy = bbox
-                    data = data.sel(x=slice(minx, maxx), y=slice(miny, maxy))  # Clip spatial data
-                data = subset_data_to_calc_stats(data=data,
+                    run_data = run_data.sel(x=slice(minx, maxx), y=slice(miny, maxy))
+
+                run_data.max(dim='time').raster.to_raster(f'{storm}_{climate}_{run}_{variable}.tif')
+
+                data = subset_data_to_calc_stats(data=run_data,
                                                  min_threshold=lower_threshold,
                                                  max_threshold=upper_threshold,
                                                  variable=variable)
@@ -92,19 +105,23 @@ def empirical_stats_and_curvefit(runs_dict, variable, lower_threshold, upper_thr
                 df1 = pd.DataFrame(data)
                 df = df1.describe(percentiles=[0.01, 0.1, 0.25, 0.5, 0.75, 0.9, 0.99])
                 df = df.T
-                loc, scale, popt, pcov = fit_expon_dist(data=data,
-                                                        lower_threshold=lower_threshold,
-                                                        upper_threshold=lower_threshold,
-                                                        nbins=nbins)
-                df['loc'] = loc
-                df['scale'] = scale
-                df['popt'] = popt
-                df['pcov'] = pcov
+
+                # loc, scale, popt, pcov = fit_expon_dist(data=np.array(data),
+                #                                         lower_threshold=lower_threshold,
+                #                                         upper_threshold=lower_threshold,
+                #                                         nbins=nbins)
+                # df['loc'] = loc
+                # df['scale'] = scale
+                # df['popt'] = popt[0]
+                # df['pcov'] = pcov[0]
+
                 df['climate'] = climate
                 df['storm'] = storm
                 df['run'] = run
                 df['run_id'] = f'{storm}_{climate}_{run}'
                 histogram_info = pd.concat([histogram_info, df])
+
+        counter += 1
 
     histogram_info.set_index('run_id', inplace=True, drop=True)
 
@@ -320,7 +337,7 @@ def calculate_scale_factors(data_stats):
 
 '''  Data and plotting info  '''
 cat_dir = r'Z:\users\lelise\data'
-yml = os.path.join(cat_dir, 'data_catalog.yml')
+yml = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
 cat = hydromt.DataCatalog(yml)
 
 font = {'family': 'Arial', 'size': 10}
@@ -335,6 +352,7 @@ aoi = state_boundaries[state_boundaries['NAME'].isin(['South Carolina', 'North C
 state_boundaries.set_index('NAME', inplace=True)
 aoi_model = state_boundaries[state_boundaries.index.isin(['South Carolina', 'North Carolina'])]
 
+
 '''  Load WRF output and calculate wind speed '''
 wd = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\met'
 os.chdir(wd)
@@ -344,6 +362,7 @@ runs_dict = {'floyd': {'present': {}, 'future': {}},
              'matthew': {'present': {}, 'future': {}},
              'florence': {'present': {}, 'future': {}}
              }
+wrf_storm_grids = []
 for storm in storms:
     for climate in climates:
         met_dir = f'{climate}_{storm}'
@@ -359,18 +378,30 @@ for storm in storms:
                 # Add data to dictionary
                 runs_dict[storm][climate][f'{run_name}'] = da
                 print(run_filepath)
+    wrf_storm_grids.append(da)
+
+
+# Setup masks for each storm grid
+wrf_storm_grids_masks = []
+state_boundaries['mask'] = 1.0
+for wrf_grid in wrf_storm_grids:
+    mask_ras = wrf_grid.raster.rasterize(state_boundaries, "mask", nodata=np.nan, all_touched=False)
+    mask_ras = xr.where(mask_ras == 1.0, False, True)
+    wrf_storm_grids_masks.append(mask_ras)
+
 
 # User Input
 var = 'wind_spd'
-bin_size = 10
-upper_threshold = 150
-thresholds = np.arange(0, 30, bin_size)
+bin_size = 5
+upper_threshold = 100
+thresholds = np.arange(0, 35, bin_size)
 overwrite_files = False
 plt_label = 'Wind Speed\nLower Threshold\n(m/s)'
-axis_label = 'Wind Speeds (m/s)'
+axis_label = 'Wind Speed (m/s)'
 bbox = None
+
+
 # Run script!
-# data_threshold = []
 info_threshold = []
 sf_threshold = []
 for lower_threshold in thresholds:
@@ -382,28 +413,21 @@ for lower_threshold in thresholds:
     data, data_info = empirical_stats_and_curvefit(runs_dict=runs_dict,
                                                    variable=var,
                                                    bbox=bbox,
+                                                   masks=wrf_storm_grids_masks,
                                                    lower_threshold=lower_threshold,
                                                    upper_threshold=upper_threshold,
                                                    bin_size=bin_size)
     data_info.to_csv(f'{var}_thresh_{lower_threshold}_to_{upper_threshold}_data.csv')
 
-    if lower_threshold <= 10:
-        plot_hist_pdf = True
-        plot_dist_cdf = True
-    else:
-        plot_hist_pdf = False
-        plot_dist_cdf = False
-
     plot_data(data_for_plot=data, data_info_for_plot=data_info,
               lower_threshold=lower_threshold, upper_threshold=upper_threshold,
-              bin_size=bin_size, plot_hist_pdf=plot_hist_pdf, plot_dist_cdf=plot_dist_cdf, plot_ecdf=True,
+              bin_size=bin_size, plot_hist_pdf=False, plot_dist_cdf=False, plot_ecdf=True,
               axis_label=axis_label,
               ax_xlim1=[lower_threshold, 40], ax_ylim1=[0.0, 0.1], figsize1=(8, 12), figsize2=(8, 4))
 
     scale_factor_df = calculate_scale_factors(data_stats=data_info)
     scale_factor_df.to_csv(f'{var}_thresh_{lower_threshold}_to_{upper_threshold}_scalefactors.csv')
 
-    # data_threshold.append(data)
     info_threshold.append(data_info)
     sf_threshold.append(scale_factor_df)
 
