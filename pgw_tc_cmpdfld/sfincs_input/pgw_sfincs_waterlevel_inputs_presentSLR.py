@@ -14,16 +14,6 @@ import matplotlib as mpl
 import cartopy.crs as ccrs
 import scipy.stats as ss
 
-# Filepath to data catalogs yml
-yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'
-yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
-
-# Working directory and model root
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\present_matthew\ensmean\matt_ensmean_present'
-mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
-mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp')
-mod.write()
-
 # Sea level rise
 slr_df = pd.DataFrame()
 dir = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\slr_projections\ipcc_ar6')
@@ -69,14 +59,104 @@ plt.close()
 percentiles = slr_sub[slr_sub['psmsl_id'] == 2295]['2100']
 a = min(percentiles)
 b = max(percentiles)
-randsamp = ss.uniform.rvs(loc=a, scale=(b - a), size=10)
 
-dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\waterlevel')
-for filename in os.listdir(dir_out):
-    storm, climate, run, variable = filename.split('_')
-    if climate == 'pres':
-        multiplier = sf_df.loc[f'{storm}_{run}'][0]
-        da = mod.data_catalog.get_rasterdataset(os.path.join(dir_out, filename))
-        da_scaled = da * multiplier
-        fileout = filename.replace('pres', 'presScaled')
-        # da_scaled.to_netcdf(os.path.join(dir_out, fileout))
+# Filepath to data catalogs yml
+yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'
+yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
+root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\AGU2023\present_florence\ensmean' \
+       r'\flor_ensmean_present'
+mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
+mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp')
+mod.write()
+region = mod.mask.where(mod.mask == 2, 0).raster.vectorize()
+
+n_slr = 5
+storms = ['floy', 'matt', 'flor']
+slr_event_tracker = []
+for storm in storms:
+    climates = ['pres']
+    runs = ['ensmean', 'ens1', 'ens2', 'ens3', 'ens4', 'ens5', 'ens6', 'ens7']
+    # Update model time before writing new boundary conditions
+    if storm == 'flor':
+        # Florence
+        tref = '20180913 000000'
+        tstart = tref
+        tstop = '20180930 000000'
+    elif storm == 'matt':
+        # Matthew
+        tref = '20161007 000000'
+        tstart = tref
+        tstop = '20161015 000000'
+        runs = ['ensmean', 'ens1', 'ens2', 'ens3', 'ens4', 'ens5', 'ens6']
+    elif storm == 'floy':
+        # Floyd
+        tref = '19990913 000000'
+        tstart = '19990914 000000'
+        tstop = '19990922 000000'
+    
+    mod.setup_config(
+        **{'crsgeo': mod.crs.to_epsg(),
+            "tref": tref,
+            "tstart": tstart,
+            "tstop": tstop})
+    
+    slr_scenarios = []
+    slr_values = []
+    for climate in climates:
+        for run in runs:
+            # Creating water level inputs from ADCIRC output for pgw runs
+            wl_id = f'{storm}_{climate}_{run}_waterlevel'
+            wl_df = mod.data_catalog.get_geodataset(data_like=wl_id, geom=region, buffer=500)
+            mod.setup_waterlevel_forcing(geodataset=wl_df,
+                                         offset='lmsl_to_navd88',  # converts mean sea level to NAVD88 datum SFINCS
+                                         timeseries=None, locations=None, buffer=500, merge=False)
+            mod.write_forcing(data_vars='bzs')
+            # Remove bad data points
+            # (Why? there are some points where there is no data in the offset raster available)
+            bzs = mod.forcing['bzs']
+            index_to_remove = bzs['index'][bzs.argmax().values.item()].values.item()
+            cleaned_bcs = bzs.drop_sel(index=index_to_remove)
+
+            counter = 0
+            while counter < n_slr:
+                slr = ss.uniform.rvs(loc=a, scale=(b - a), size=1)
+                event_id = f'{storm}_{climate}Scaled_{run}_SLR{counter+1}'
+                slr_scenarios.append(event_id)
+
+                slr_values.append(slr)
+                slr_bcs = cleaned_bcs + slr
+                mod.setup_waterlevel_forcing(geodataset=slr_bcs, timeseries=None, locations=None, buffer=500,
+                                             merge=False)
+                mod.write_forcing()  # this creates the sfincs.bnd and sfincs.bzs input files
+    
+                dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models', 'waterlevel_slr')
+    
+                if os.path.exists(dir_out) is False:
+                    os.makedirs(dir_out)
+                shutil.move(src=os.path.join(mod.root, 'sfincs.bnd'),
+                            dst=os.path.join(dir_out, f'{event_id}_waterlevel.bnd'))
+                shutil.move(src=os.path.join(mod.root, 'sfincs.bzs'),
+                            dst=os.path.join(dir_out, f'{event_id}_waterlevel.bzs'))
+
+                counter += 1
+
+                # # Plot the output for the event to make sure it makes sense
+                # dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\forcing_figs_slr')
+                # if os.path.exists(dir_out) is False:
+                #     os.makedirs(dir_out)
+                # figout = os.path.join(dir_out, f'{event_id}.png')
+                # fig, axes = mod.plot_forcing(forcings='bzs')
+                # for ax in axes:
+                #     ax.legend().remove()
+                #     ax.set_title('')
+                # plt.subplots_adjust(left=0.12, wspace=0.05, hspace=0.25, top=0.925, bottom=0.15)
+                # plt.suptitle(event_id)
+                # plt.savefig(figout)
+                # plt.close()
+    
+    slr_events = pd.DataFrame(slr_values)
+    slr_events.index = slr_scenarios
+    slr_event_tracker.append(slr_events)
+
+event_db = pd.concat(slr_event_tracker)
+event_db.to_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\slr_event_ids.csv', header=False)

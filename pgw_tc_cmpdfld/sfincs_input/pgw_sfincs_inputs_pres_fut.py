@@ -19,7 +19,7 @@ yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_cata
 yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 
 # Working directory and model root
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\present_matthew\ensmean\matt_ensmean_present'
+root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\AGU2023\present_florence\ensmean\flor_ensmean_present'
 mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
 mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp')
 mod.write()
@@ -38,30 +38,31 @@ mod.write()
 # tstart               = 19990914 000000
 # tstop                = 19990922 000000
 
-# mod.setup_config(
-#     **{
-#         'crsgeo': mod.crs.to_epsg(),
-#         "tref": "19990913 000000",
-#         "tstart": "19990914 000000",
-#         "tstop": "19990922 000000",
-#     }
-# )
+mod.setup_config(
+    **{
+        'crsgeo': mod.crs.to_epsg(),
+        "tref": "19990913 000000",
+        "tstart": "19990914 000000",
+        "tstop": "19990922 000000",
+    }
+)
 
 ''' Loop through the events and write the SFINCS input files '''
-storm = 'matt'  # update for each storm: floy, flor, matt
+storm = 'floy'  # update for each storm: floy, flor, matt
 climates = [
     'pres',
-    'fut'
+    # 'fut'
 ]
 runs = [
-    'ensmean',
-    'ens1',
-    'ens2',
-    'ens3',
-    'ens4',
-    'ens5',
-    'ens6',
-    'ens7'
+    # 'ensmean',
+    # 'ens1',
+    # 'ens2',
+    # 'ens3',
+    # 'ens4',
+    # 'ens5',
+    # 'ens6',
+    # 'ens7',
+    'tides',
 ]
 
 # Creating meteo inputs from WRF output for pgw runs
@@ -69,20 +70,20 @@ for climate in climates:
     for run in runs:
         met_id = f'{storm}_{climate}_{run}'
 
-        # Set up the SFINCS precip and wind and write to netcdf
-        mod.setup_precip_forcing_from_grid(precip=met_id, aggregate=False)
-        mod.setup_wind_forcing_from_grid(wind=met_id)
-        mod.write_forcing()  # this creates the files precip_2d.nc and wind_2d.nc in the SFINCS model folder
-
-        # Take these newly created files and rename and move them to be associated with the correct event
-        variables = ['precip_2d', 'wind_2d']
-        for var in variables:
-            vout = var.replace('_', '')  # remove the underscore
-            # Create a directory for the nc files to be saved in
-            dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models', vout)
-            if os.path.exists(dir_out) is False:
-                os.makedirs(dir_out)
-            shutil.move(src=os.path.join(mod.root, f'{var}.nc'), dst=os.path.join(dir_out, f'{met_id}_{vout}.nc'))
+        # # Set up the SFINCS precip and wind and write to netcdf
+        # mod.setup_precip_forcing_from_grid(precip=met_id, aggregate=False)
+        # mod.setup_wind_forcing_from_grid(wind=met_id)
+        # mod.write_forcing()  # this creates the files precip_2d.nc and wind_2d.nc in the SFINCS model folder
+        #
+        # # Take these newly created files and rename and move them to be associated with the correct event
+        # variables = ['precip_2d', 'wind_2d']
+        # for var in variables:
+        #     vout = var.replace('_', '')  # remove the underscore
+        #     # Create a directory for the nc files to be saved in
+        #     dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models', vout)
+        #     if os.path.exists(dir_out) is False:
+        #         os.makedirs(dir_out)
+        #     shutil.move(src=os.path.join(mod.root, f'{var}.nc'), dst=os.path.join(dir_out, f'{met_id}_{vout}.nc'))
 
         # Creating water level inputs from ADCIRC output for pgw runs
         wl_id = f'{storm}_{climate}_{run}_waterlevel'
