@@ -40,18 +40,18 @@ mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
 
 # Directory to output stuff
 out_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
-results_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\res2'
+results_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\arch'
 
 # Get zsmax across model runs
-da_zsmax, event_ids = get_zsmax_da(mod_results_dir=results_dir)
-
-
+# da_zsmax, event_ids = get_zsmax_da(mod_results_dir=results_dir)
+da_zsmax = mod.data_catalog.get_rasterdataset(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
+                                              r'\pgw_zsmax.nc')
 
 da_diff_list = []
 run_ids = []
-scenarios = ['runoff', 'coastal', 'compound']
-storms = ['flor']
-climates = ['pres', 'fut', 'presScaled']
+scenarios = ['coastal', 'runoff', 'compound']
+storms = ['flor', 'floy', 'matt']
+climates = ['pres']
 for storm in storms:
     for climate in climates:
         if climate == 'presScaled':
@@ -101,23 +101,34 @@ da_diff['run'] = xr.IndexVariable('run', run_ids)
 wkt = mod.grid['dep'].raster.crs.to_wkt()
 utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
 utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
-extent = np.array(mod.region.buffer(10000).total_bounds)[[0, 2, 1, 3]]
+extent = np.array(mod.region.buffer(10).total_bounds)[[0, 2, 1, 3]]
+
+font = {'family': 'Arial', 'size': 10}
+mpl.rc('font', **font)
+mpl.rcParams.update({'axes.titlesize': 10})
+mpl.rcParams["figure.autolayout"] = True
+nrow = 3
+ncol = 3
+n_subplots = nrow * ncol
+first_in_row = np.arange(0, n_subplots, ncol)
+last_in_row = np.arange(ncol - 1, n_subplots, ncol)
+first_row = np.arange(0, ncol)
+last_row = np.arange(first_in_row[-1], n_subplots, 1)
+scenarios = ['coastal', 'runoff', 'combined']
 fig, axes = plt.subplots(
-    nrows=3, ncols=3,
-    figsize=(8, 8),
+    nrows=nrow, ncols=ncol,
+    figsize=(6, 5),
     subplot_kw={'projection': utm},
     tight_layout=True,
     layout='constrained')
 axes = axes.flatten()
-
-storm = 'flor'
-ckwargs = dict(cmap='seismic', vmin=-1, vmax=1)
+ckwargs = dict(cmap='seismic', vmin=-0.5, vmax=0.5)
 counter = 0
 for ax in axes:
     run_id = da_diff[counter].run.values.item()
     cs = da_diff[counter].plot(ax=ax, add_colorbar=False, **ckwargs, zorder=0)
     ax.set_title('')
-    ax.set_title(run_id)
+    # ax.set_title(run_id)
 
     minx, miny, maxx, maxy = extent
     ax.set_xlim(minx, maxx)
@@ -126,15 +137,26 @@ for ax in axes:
     ax.set_axis_off()
     mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1, alpha=1)
     counter += 1
-            
+for i in range(len(axes)):
+    if i in first_row:
+        axes[i].set_title(f'{scenarios[i]}')
+    if i in first_in_row:
+        axes[i].text(-0.05, 0.5, f'{storms[int(i / 3)]}',
+                     horizontalalignment='right',
+                     verticalalignment='center',
+                     rotation='vertical',
+                     transform=axes[i].transAxes)
 # Colorbar - Precip
-label = 'Water Level Difference (m)\nEnsmean minus Mean of ensembles'
+label = 'Water Level Difference (m)'
 ax = axes[-4]
 pos0 = ax.get_position()  # get the original position
-cax = fig.add_axes([pos0.x1 + 0.01, pos0.y0 + pos0.height * 0.1, 0.025, pos0.height * 0.8])
+cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.2, 0.025, pos0.height * 1.2])
 cbar = fig.colorbar(cs, cax=cax, orientation='vertical', label=label, extend='both')
 
-plt.subplots_adjust(wspace=0.0, hspace=0.05)
+plt.subplots_adjust(wspace=0.0, hspace=0.0)
 plt.margins(x=0, y=0)
-plt.savefig(os.path.join(out_dir, f'{storm}_MeanMinusMeanOfMembers.png'), bbox_inches='tight', dpi=255)
+plt.suptitle('Present Ensemble Mean minus Mean of the Ensemble Members')
+plt.savefig(os.path.join(out_dir, f'MeanMinusMeanOfMembers_pres.png'),
+            tight_layout=True, constrained_layout=True,
+            bbox_inches='tight', dpi=255)
 plt.close()
