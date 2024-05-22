@@ -41,16 +41,22 @@ def classify_zsmax_by_driver(da, compound_key, runoff_key, coastal_key, name_out
     return da_classified, fld_area_by_driver, da_compound, da_diff
 
 
-os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis')
-zsmax_file = 'pgw_zsmax.nc'
-da_zsmax = xr.open_dataarray(zsmax_file)
-driver_file = 'pgw_compound_extent.nc'
+work_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
+out_dir = os.path.join(work_dir, 'driver_analysis')
+if os.path.exists(out_dir) is False:
+    os.makedirs(out_dir)
+os.chdir(out_dir)
 
-# Future and Present compound flood extent
 storms = ['flor', 'floy', 'matt']
 climates = ['pres', 'presScaled']
-if os.path.exists(driver_file) is False:
-    hmin = 0.05  # minimum difference between the individual and compound drivers
+hmin = 0.05  # minimum difference between the individual and compound drivers
+
+''' Parse the drivers for each simulation '''
+# Load the peak water levels for all simulations
+zsmax_file = os.path.join(work_dir, 'zsmax', 'pgw_zsmax.nc')
+da_zsmax = xr.open_dataarray(zsmax_file)
+
+if os.path.exists('pgw_drivers_classified_all.nc') is False:
     fld_cells = pd.DataFrame()  # dataframe populated with total flooded area
     fld_da_compound = []  # populated with data arrays of the compound areas for each run
     fld_da_classified = []
@@ -117,24 +123,66 @@ if os.path.exists(driver_file) is False:
                     print(da_compound.name)
 
     # Concatenate the data arrays
-    # fld_da_compound = xr.concat(fld_da_compound, dim='run')
-    # fld_da_compound['run'] = xr.IndexVariable('run', run_ids)
-    # fld_da_compound.to_netcdf(driver_file)
-    #
-    # fld_da_classified = xr.concat(fld_da_classified, dim='run')
-    # fld_da_classified['run'] = xr.IndexVariable('run', run_ids)
-    # fld_da_classified.to_netcdf('pgw_drivers_classified.nc')
+    fld_da_compound = xr.concat(fld_da_compound, dim='run')
+    fld_da_compound['run'] = xr.IndexVariable('run', run_ids)
+    fld_da_compound.to_netcdf('pgw_compound_extent_all.nc')
+
+    fld_da_classified = xr.concat(fld_da_classified, dim='run')
+    fld_da_classified['run'] = xr.IndexVariable('run', run_ids)
+    fld_da_classified.to_netcdf('pgw_drivers_classified_all.nc')
 
     fld_da_diff = xr.concat(fld_da_diff, dim='run')
     fld_da_diff['run'] = xr.IndexVariable('run', run_ids)
-    fld_da_diff.to_netcdf(os.path.join(os.getcwd(), 'pgw_wl_diff.nc'))
+    fld_da_diff.to_netcdf('pgw_WL_maxCmpd_minus_maxIndiv_all.nc')
 
     # Cleanup flood area dataframe
-    # fld_cells.index = ['no_flood', 'coastal', 'compound_coastal', 'runoff', 'compound_runoff']
-    # fld_cells = pd.DataFrame(fld_cells)
-    # fld_cells.to_csv(driver_file.replace('.nc', '.csv'))
-else:
-    da_compound = xr.open_dataarray(driver_file)
-    fld_da_classified = xr.open_dataarray('pgw_drivers_classified.nc')
-    fld_cells = pd.read_csv(driver_file.replace('.nc', '.csv'), index_col=0)
-    cc_run_ids = pd.read_csv('cc_run_ids.csv', index_col=0)
+    fld_cells.index = ['no_flood', 'coastal', 'compound_coastal', 'runoff', 'compound_runoff']
+    fld_cells = pd.DataFrame(fld_cells)
+    fld_cells.to_csv('pgw_drivers_classified_all_cellCount.csv')
+
+''' Parse the drivers of the ensemble mean '''
+for type in ['mean', 'max']:
+    zsmax_file = os.path.join(work_dir, 'zsmax', f'pgw_ensmean_zsmax_{type}.nc')
+    da_ensmean = xr.open_dataarray(zsmax_file)
+
+    if os.path.exists(f'pgw_drivers_classified_ensmean_{type}.nc') is False:
+        fld_cells = pd.DataFrame()  # dataframe populated with total flooded area
+        fld_da_compound = []  # populated with data arrays of the compound areas for each run
+        fld_da_classified = []
+        fld_da_diff = []
+        run_ids = []
+        for storm in ['flor', 'floy', 'matt']:
+            for climate in ['pres', 'presScaled']:
+                compound_key, runoff_key, coastal_key = [f'{storm}_{climate}_compound_{type}',
+                                                         f'{storm}_{climate}_runoff_{type}',
+                                                         f'{storm}_{climate}_coastal_{type}']
+                out = classify_zsmax_by_driver(da=da_ensmean,
+                                               compound_key=compound_key, runoff_key=runoff_key,
+                                               coastal_key=coastal_key, name_out=f'{storm}_{climate}_ensmean',
+                                               hmin=0.05)
+                da_classified, fld_cells_by_driver, da_compound, da_diff = out
+                fld_da_classified.append(da_classified)
+                fld_cells[f'{da_compound.name}'] = fld_cells_by_driver
+                fld_da_compound.append(da_compound)
+                fld_da_diff.append(da_diff)
+                run_ids.append(f'{da_compound.name}')
+                print(da_compound.name)
+
+        # Concatenate the data arrays
+        fld_da_compound = xr.concat(fld_da_compound, dim='run')
+        fld_da_compound['run'] = xr.IndexVariable('run', run_ids)
+        fld_da_compound.to_netcdf(f'pgw_compound_extent_ensmean_{type}.nc')
+
+        fld_da_classified = xr.concat(fld_da_classified, dim='run')
+        fld_da_classified['run'] = xr.IndexVariable('run', run_ids)
+        fld_da_classified.to_netcdf(f'pgw_drivers_classified_ensmean_{type}.nc')
+
+        fld_da_diff = xr.concat(fld_da_diff, dim='run')
+        fld_da_diff['run'] = xr.IndexVariable('run', run_ids)
+        fld_da_diff.to_netcdf(f'pgw_WL_maxCmpd_minus_maxIndiv_ensmean_{type}.nc')
+
+        # Cleanup flood area dataframe
+        # No Flood = 0, Coastal = 1, Compound-coastal = 2, Runoff = 3, Compound-runoff = 4
+        fld_cells.index = ['no_flood', 'coastal', 'compound_coastal', 'runoff', 'compound_runoff']
+        fld_cells = pd.DataFrame(fld_cells)
+        fld_cells.to_csv(f'pgw_drivers_classified_ensmean_{type}_cellCount.csv')
