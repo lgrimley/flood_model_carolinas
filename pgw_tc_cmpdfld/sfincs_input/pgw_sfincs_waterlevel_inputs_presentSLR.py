@@ -59,6 +59,9 @@ plt.close()
 percentiles = slr_sub[slr_sub['psmsl_id'] == 2295]['2100']
 a = min(percentiles)
 b = max(percentiles)
+dist = ss.uniform(loc=a, scale=(b - a))
+print(dist.mean())
+
 
 # Filepath to data catalogs yml
 yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'

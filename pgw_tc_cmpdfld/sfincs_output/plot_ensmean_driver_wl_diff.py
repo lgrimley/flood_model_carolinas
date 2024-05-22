@@ -25,28 +25,35 @@ if os.path.exists(out_dir) is False:
 os.chdir(out_dir)
 
 # Load a SFINCS model
+yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'
+yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\AGU2023\future_florence\future_florence_ensmean'
-mod = SfincsModel(root=root, mode='r')
+mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
 dep = mod.grid['dep']
 
+coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
+coastal_wb = coastal_wb.to_crs(mod.crs)
+coastal_wb_clip = coastal_wb.clip(mod.region)
+
+storms = ['flor', 'floy', 'matt']
+scenarios = ['coastal', 'runoff', 'compound']
+
 for type in ['mean', 'max']:
-    fld_da_classified = xr.open_dataarray(os.path.join(work_dir,
-                                                       'driver_analysis',
+    fld_da_classified = xr.open_dataarray(os.path.join(work_dir, 'driver_analysis',
                                                        f'pgw_drivers_classified_ensmean_{type}.nc'))
-    da_ensmean = xr.open_dataarray(os.path.join(work_dir,
-                                                'zsmax',
+    da_ensmean = xr.open_dataarray(os.path.join(work_dir, 'zsmax',
                                                 f'pgw_ensmean_zsmax_{type}.nc'))
 
     # No Flood = 0, Coastal = 1, Compound-coastal = 2, Runoff = 3, Compound-runoff = 4
     ds_plot = []
-    for storm in ['flor', 'floy', 'matt']:
+    for storm in storms:
         pres_wl = da_ensmean.sel(run=f'{storm}_pres_compound_{type}')
         pres_drivers = fld_da_classified.sel(run=f'{storm}_pres_ensmean')
 
         fut_wl = da_ensmean.sel(run=f'{storm}_presScaled_compound_{type}')
         fut_drivers = fld_da_classified.sel(run=f'{storm}_presScaled_ensmean')
 
-        for scenario in ['coastal', 'runoff', 'compound']:
+        for scenario in scenarios:
             if scenario == 'coastal':
                 mask_pres = xr.where((pres_drivers == 1), True, False)
                 mask_fut = xr.where((fut_drivers == 1), True, False)
@@ -78,10 +85,12 @@ for type in ['mean', 'max']:
         wkt = mod.grid['dep'].raster.crs.to_wkt()
         utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
         utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
+
         font = {'family': 'Arial', 'size': 10}
         mpl.rc('font', **font)
         mpl.rcParams.update({'axes.titlesize': 10})
         mpl.rcParams["figure.autolayout"] = True
+
         nrow = 3
         ncol = 3
         n_subplots = nrow * ncol
@@ -92,7 +101,7 @@ for type in ['mean', 'max']:
 
         fig, axes = plt.subplots(
             nrows=nrow, ncols=ncol,
-            figsize=(6, 6),
+            figsize=(6, 5),
             subplot_kw={'projection': utm},
             tight_layout=True,
             layout='constrained')
@@ -104,13 +113,23 @@ for type in ['mean', 'max']:
                                        add_colorbar=False,
                                        **ckwargs,
                                        zorder=0)
-            ax.set_title('')
-            ax.set_title(ds_plot[counter].name)
-            ax.set_axis_off()
+            coastal_wb_clip.plot(ax=ax, color='none', edgecolor='black',
+                                 linewidth=0.25, zorder=1, alpha=0.5)
             mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1, alpha=1)
+
+            ax.set_title('')
+            ax.set_axis_off()
+            if counter in first_row:
+                ax.set_title(scenarios[counter], loc='center', fontsize=10)
+            for i in range(len(first_in_row)):
+                axes[first_in_row[i]].text(-0.05, 0.5, storms[i],
+                                           horizontalalignment='right',
+                                           verticalalignment='center',
+                                           rotation='vertical',
+                                           transform=axes[first_in_row[i]].transAxes)
             counter += 1
 
-        label = 'Depth Difference (m)\nFuture minus Present'
+        label = 'Diff. in Peak Depth (m)\nFuture minus Present'
         ax = axes[5]
         pos0 = ax.get_position()  # get the original position
         cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.0, 0.025, pos0.height * 1.2])
