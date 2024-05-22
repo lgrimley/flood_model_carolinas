@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 # coding: utf-8
-
+# This script was used to calculate flood depths at buildings across the Carolinas domain in 12/23
 import os
 import re
 import pandas as pd

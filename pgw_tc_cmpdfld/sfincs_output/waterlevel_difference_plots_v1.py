@@ -17,6 +17,7 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 from matplotlib.ticker import FormatStrFormatter
 
+# This script is used for plotting water level differences for the PGW ensmean for coastal, runoff, and compound drivers
 # This script reads in the netCDF of zsmax and plots the difference between the future and present
 font = {'family': 'Arial', 'size': 10}
 mpl.rc('font', **font)
@@ -38,10 +39,77 @@ out_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis
 results_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\arch'
 da_zsmax = mod.data_catalog.get_rasterdataset(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
                                               r'\pgw_zsmax.nc')
-
+coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
+coastal_wb = coastal_wb.to_crs(mod.crs)
+coastal_wb_clip = coastal_wb.clip(mod.region)
 storms = ['flor', 'floy', 'matt']
 storm_titles = ['Florence', 'Floyd', 'Matthew']
-# Calculate the difference in peak water level for the RUNOFF scenario
+scenario_titles = ['Coastal', 'Runoff', 'Combined']
+
+
+nrow = 3
+ncol = 3
+n_subplots = nrow * ncol
+first_in_row = np.arange(0, n_subplots, ncol)
+last_in_row = np.arange(ncol - 1, n_subplots, ncol)
+first_row = np.arange(0, ncol)
+last_row = np.arange(first_in_row[-1], n_subplots, 1)
+fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6.5, 4.5),
+                         subplot_kw={'projection': utm}, tight_layout=True, layout='constrained')
+axes = axes.flatten()
+counter = 0
+for storm in storms:
+    for scenario in ['coastal', 'runoff', 'compound']:
+        if scenario == 'runoff':
+            fut_ids = [f'{storm}_presScaled_ensmean_{scenario}']
+        else:
+            fut_ids = [f'{storm}_presScaled_ensmean_SLR{i}_{scenario}' for i in np.arange(1, 6, 1)]
+
+        pres_ids = f'{storm}_pres_ensmean_{scenario}'
+        ds_fut = da_zsmax.sel(run=fut_ids).mean(dim='run')
+        ds_pres = da_zsmax.sel(run=pres_ids)
+        diff = (ds_fut - ds_pres).compute()
+        diff = diff.where(diff > 0.05)
+
+        ax = axes[counter]
+        ckwargs = dict(cmap='gist_heat_r', vmin=0.1, vmax=2.1)
+        cs = diff.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=0)
+        if counter in [1, 4, 7]:
+            coastal_wb_clip.plot(ax=ax, color='none', edgecolor='black',
+                                 linewidth=0.25, zorder=1, alpha=0.7)
+        mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1, alpha=1)
+
+        ax.set_title('')
+        if counter in first_row:
+            ax.set_title(scenario_titles[counter], loc='center', fontsize=10)
+        for i in range(len(first_in_row)):
+            axes[first_in_row[i]].text(-0.05, 0.5, storm_titles[i],
+                                       horizontalalignment='right',
+                                       verticalalignment='center',
+                                       rotation='vertical',
+                                       transform=axes[first_in_row[i]].transAxes)
+        minx, miny, maxx, maxy = extent
+        ax.set_xlim(minx, maxx)
+        ax.set_ylim(miny, maxy)
+        ax.set_extent(extent, crs=utm)
+        ax.set_axis_off()
+
+        print(counter)
+        counter += 1
+
+label = 'Peak Water Level Difference (m)\nFuture minus Present'
+pos1 = axes[last_in_row[1]].get_position()  # get the original position
+cbar_ax = fig.add_axes([pos1.x1 + 0.01, pos1.y0 + pos1.height * 0.1, 0.025, pos1.height * 1.1])
+cbar = fig.colorbar(cs, cax=cbar_ax,
+                    orientation='vertical',
+                    label=label,
+                    extend='max')
+plt.subplots_adjust(wspace=0.0, hspace=0.0)
+plt.margins(x=0, y=0)
+plt.savefig(os.path.join(out_dir, f'MaxWL_diff_compound_ensmean_v2.png'), bbox_inches='tight', dpi=255)
+plt.close()
+
+# Calculate the difference in peak water level for the RUNOFF scenario and plot for all ensemble members
 # scenario = 'runoff'
 # nrow = 4
 # ncol = 2
@@ -67,20 +135,20 @@ storm_titles = ['Florence', 'Floyd', 'Matthew']
 #         max_pres = da_zsmax.sel(run=pres_id)
 #         max_fut = da_zsmax.sel(run=fut_id)
 #         diff = (max_fut - max_pres).compute()
-# 
+#
 #         ax = axes[counter]
 #         ckwargs = dict(cmap='Reds', vmin=0, vmax=1.5)
 #         cs = diff.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=0)
 #         ax.set_title('')
 #         ax.set_title(run, loc='center')
-# 
+#
 #         minx, miny, maxx, maxy = extent
 #         ax.set_xlim(minx, maxx)
 #         ax.set_ylim(miny, maxy)
 #         ax.set_extent(extent, crs=utm)
 #         ax.set_axis_off()
 #         mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1, alpha=1)
-# 
+#
 #         print(counter)
 #         counter += 1
 #     label = 'Water Level Difference (m)\nFuture (Scaled) minus Present'
@@ -90,7 +158,7 @@ storm_titles = ['Florence', 'Floyd', 'Matthew']
 #                         orientation='vertical',
 #                         label=label,
 #                         extend='max')
-# 
+#
 #     plt.subplots_adjust(wspace=0.0, hspace=0.08, top=0.92)
 #     plt.margins(x=0, y=0)
 #     plt.suptitle(f'{storm} {scenario}')
@@ -98,49 +166,3 @@ storm_titles = ['Florence', 'Floyd', 'Matthew']
 #     plt.close()
 
 # Plotting the difference in peak water level for compound ensmean for paper
-nrow = 3
-ncol = 1
-n_subplots = nrow * ncol
-first_in_row = np.arange(0, n_subplots, ncol)
-last_in_row = np.arange(ncol - 1, n_subplots, ncol)
-first_row = np.arange(0, ncol)
-last_row = np.arange(first_in_row[-1], n_subplots, 1)
-fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(4, 6.5),
-                         subplot_kw={'projection': utm}, tight_layout=True, layout='constrained')
-axes = axes.flatten()
-counter = 0
-for storm in storms:
-    fut_ids = [f'{storm}_presScaled_ensmean_SLR{i}_compound' for i in np.arange(1, 6, 1)]
-    pres_ids = f'{storm}_pres_ensmean_compound'
-
-    ds_fut = da_zsmax.sel(run=fut_ids).mean(dim='run')
-    ds_pres = da_zsmax.sel(run=pres_ids)
-    diff = (ds_fut - ds_pres).compute()
-    diff = diff.where(diff > 0.1)
-
-    ax = axes[counter]
-    ckwargs = dict(cmap='gist_heat_r', vmin=0.1, vmax=2.1)
-    cs = diff.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=0)
-    ax.set_title('')
-    ax.set_title(storm_titles[counter], loc='center', fontsize=10)
-
-    minx, miny, maxx, maxy = extent
-    ax.set_xlim(minx, maxx)
-    ax.set_ylim(miny, maxy)
-    ax.set_extent(extent, crs=utm)
-    ax.set_axis_off()
-    mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1, alpha=1)
-
-    print(counter)
-    counter += 1
-label = 'Peak Water Level Difference (m)\nFuture minus Present'
-pos1 = axes[1].get_position()  # get the original position
-cbar_ax = fig.add_axes([pos1.x1 + 0.05, pos1.y0 + pos1.height * 0.1, 0.025, pos1.height * 0.9])
-cbar = fig.colorbar(cs, cax=cbar_ax,
-                    orientation='vertical',
-                    label=label,
-                    extend='max')
-plt.subplots_adjust(wspace=0.0, hspace=0.0)
-plt.margins(x=0, y=0)
-plt.savefig(os.path.join(out_dir, f'MaxWL_diff_compound_ensmean.png'), bbox_inches='tight', dpi=255)
-plt.close()

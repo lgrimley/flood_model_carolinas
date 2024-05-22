@@ -18,6 +18,8 @@ import cartopy.crs as ccrs
 from matplotlib.ticker import FormatStrFormatter
 
 
+# This script plots the difference between the ensmean water level and the mean water level across the ensemble
+
 def get_zsmax_da(mod_results_dir):
     da_zsmax_list = []
     event_ids = []
@@ -46,12 +48,13 @@ results_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\arch
 # da_zsmax, event_ids = get_zsmax_da(mod_results_dir=results_dir)
 da_zsmax = mod.data_catalog.get_rasterdataset(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
                                               r'\pgw_zsmax.nc')
+cc_run_ids = pd.read_csv(os.path.join(out_dir, 'cc_run_ids.csv'))
 
 da_diff_list = []
 run_ids = []
 scenarios = ['coastal', 'runoff', 'compound']
 storms = ['flor', 'floy', 'matt']
-climates = ['pres']
+climates = ['pres', ]
 for storm in storms:
     for climate in climates:
         if climate == 'presScaled':
@@ -96,6 +99,7 @@ for storm in storms:
 
 da_diff = xr.concat(da_diff_list, dim='run')
 da_diff['run'] = xr.IndexVariable('run', run_ids)
+#da_diff = da_diff.sel(run=['flor_pres_compound', 'floy_pres_compound', 'matt_pres_compound'])
 
 # Plotting info
 wkt = mod.grid['dep'].raster.crs.to_wkt()
@@ -107,17 +111,20 @@ font = {'family': 'Arial', 'size': 10}
 mpl.rc('font', **font)
 mpl.rcParams.update({'axes.titlesize': 10})
 mpl.rcParams["figure.autolayout"] = True
-nrow = 3
+nrow = 1
 ncol = 3
 n_subplots = nrow * ncol
 first_in_row = np.arange(0, n_subplots, ncol)
 last_in_row = np.arange(ncol - 1, n_subplots, ncol)
 first_row = np.arange(0, ncol)
 last_row = np.arange(first_in_row[-1], n_subplots, 1)
-scenarios = ['coastal', 'runoff', 'combined']
+scenarios = [
+    #'coastal',
+    #'runoff',
+    'combined']
 fig, axes = plt.subplots(
     nrows=nrow, ncols=ncol,
-    figsize=(6, 5),
+    figsize=(6, 3),
     subplot_kw={'projection': utm},
     tight_layout=True,
     layout='constrained')
@@ -139,24 +146,24 @@ for ax in axes:
     counter += 1
 for i in range(len(axes)):
     if i in first_row:
-        axes[i].set_title(f'{scenarios[i]}')
-    if i in first_in_row:
-        axes[i].text(-0.05, 0.5, f'{storms[int(i / 3)]}',
-                     horizontalalignment='right',
-                     verticalalignment='center',
-                     rotation='vertical',
-                     transform=axes[i].transAxes)
+        axes[i].set_title(f'{storms[i]}')
+    # if i in first_in_row:
+    #     axes[i].text(-0.05, 0.5, f'{storms[int(i / 3)]}',
+    #                  horizontalalignment='right',
+    #                  verticalalignment='center',
+    #                  rotation='vertical',
+    #                  transform=axes[i].transAxes)
 # Colorbar - Precip
-label = 'Water Level Difference (m)'
-ax = axes[-4]
+label = 'Water Level\nDifference (m)'
+ax = axes[-1]
 pos0 = ax.get_position()  # get the original position
-cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.2, 0.025, pos0.height * 1.2])
+cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.0, 0.025, pos0.height * 1.2])
 cbar = fig.colorbar(cs, cax=cax, orientation='vertical', label=label, extend='both')
 
 plt.subplots_adjust(wspace=0.0, hspace=0.0)
 plt.margins(x=0, y=0)
-plt.suptitle('Present Ensemble Mean minus Mean of the Ensemble Members')
-plt.savefig(os.path.join(out_dir, f'MeanMinusMeanOfMembers_pres.png'),
+#plt.suptitle('Present Ensemble Mean minus Mean of the Ensemble Members')
+plt.savefig(os.path.join(out_dir, f'MeanMinusMeanOfMembers_pres_combined.png'),
             tight_layout=True, constrained_layout=True,
             bbox_inches='tight', dpi=255)
 plt.close()

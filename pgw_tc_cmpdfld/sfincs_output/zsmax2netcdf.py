@@ -8,7 +8,7 @@ import hydromt
 from hydromt import DataCatalog
 from hydromt_sfincs import SfincsModel, utils
 
-
+# This script loops through SFINCS models and saves the peak water levels for each simulation to a single netcdf
 def get_hmax_da(mod_results_dir, depfile=None, hmin=0.05):
     da_hmax_list = []
     event_ids = []
@@ -47,11 +47,16 @@ for root, dirs, files in os.walk(results_dir):
 da_zsmax_list = []
 event_ids = []
 for dir in os.listdir(results_dir):
-    mod.read_results(fn_map=os.path.join(results_dir, dir, 'sfincs_map.nc'))
-    zsmax = mod.results["zsmax"].max(dim='timemax')
-    da_zsmax_list.append(zsmax)
-    event_ids.append(dir)
+    try:
+        mod.read_results(fn_map=os.path.join(results_dir, dir, 'sfincs_map.nc'))
+        zsmax = mod.results["zsmax"].max(dim='timemax')
+        da_zsmax_list.append(zsmax)
+        event_ids.append(dir)
+    except:
+        print(dir)
+
 da_zsmax = xr.concat(da_zsmax_list, dim='run')
 da_zsmax['run'] = xr.IndexVariable('run', event_ids)
 da_zsmax.to_netcdf(fileout)
 print('Done writing zsmax for all runs!')
+
