@@ -4,7 +4,7 @@ import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 
-os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis\figs_climate_boxplots')
+os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\analysis')
 # slr = pd.read_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\slr_event_ids_DO_NOT_DELETE.csv',
 #                   header=None)
 # slr.columns = ['event_id', 'slr_m']
@@ -24,6 +24,31 @@ rr_pres = rr[rr['climate'] == 'present']
 rr_pres_ensmean = rr_pres[rr_pres['run'] == 'ensmean']
 rr_pres_members = rr_pres[rr_pres['run'] != 'ensmean']
 
+combined = pd.concat([rr_pres_members, rr_fut_members], axis=0, ignore_index=True)
+combined.set_index(['run_id'], inplace=True)
+
+# Calculate std of the mean
+stats = pd.DataFrame()
+for storm in ['florence', 'floyd', 'matthew']:
+    stats_list = [f'{storm}']
+
+    runs1 = [x for x in combined.index if storm in x and 'present' in x]
+    d1 = combined[combined.index.isin(runs1)]
+
+    runs2 = [x for x in combined.index if storm in x and 'future' in x]
+    d2 = combined[combined.index.isin(runs2)]
+
+    for s in ['mean', '50%', '90%']:
+        diff = d2[stat].values - d1[stat].values
+        std = np.std(diff)
+        stats_list.append(diff.mean())
+        stats_list.append(std)
+    stats_df = pd.DataFrame(stats_list).T
+    stats_df.columns = ['event', 'mean', 'mean_std', '50%', '50%_std', '90%', '90%_std']
+    stats = pd.concat([stats, stats_df], axis=0)
+stats.set_index('event', inplace=True, drop=True)
+stats = stats.astype(float).round(2)
+
 ''' WIND SPEED '''
 ws = pd.read_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\wrf_analysis\scale_factors'
                  r'\scale_factors_carolinas_landMask\wind_spd_thresh_10_to_100\wind_spd_thresh_10_to_100_data.csv',
@@ -34,6 +59,30 @@ ws_fut_members = ws_fut[ws_fut['run'] != 'ensmean']
 ws_pres = ws[ws['climate'] == 'present']
 ws_pres_ensmean = ws_pres[ws_pres['run'] == 'ensmean']
 ws_pres_members = ws_pres[ws_pres['run'] != 'ensmean']
+
+combined = pd.concat([ws_pres_members, ws_fut_members], axis=0, ignore_index=True)
+combined.set_index(['run_id'], inplace=True)
+# Calculate std of the mean
+stats = pd.DataFrame()
+for storm in ['florence', 'floyd', 'matthew']:
+    stats_list = [f'{storm}']
+
+    runs1 = [x for x in combined.index if storm in x and 'present' in x]
+    d1 = combined[combined.index.isin(runs1)]
+
+    runs2 = [x for x in combined.index if storm in x and 'future' in x]
+    d2 = combined[combined.index.isin(runs2)]
+
+    for s in ['mean', '50%', '90%']:
+        diff = d2[stat].values - d1[stat].values
+        std = np.std(diff)
+        stats_list.append(diff.mean())
+        stats_list.append(std)
+    stats_df = pd.DataFrame(stats_list).T
+    stats_df.columns = ['event', 'mean', 'mean_std', '50%', '50%_std', '90%', '90%_std']
+    stats = pd.concat([stats, stats_df], axis=0)
+stats.set_index('event', inplace=True, drop=True)
+stats = stats.astype(float).round(2)
 
 ''' PLOT Details '''
 font = {'family': 'Arial', 'size': 10}
@@ -83,13 +132,13 @@ if plot_boxplot is True:
         ax.set_title('')
         if ii in first_row:
             ax.set_ylabel('Mean Rain Rate\n(mm/hr)')
-            ax.set_ylim(9, 20)
+            ax.set_ylim(12, 20)
             ax.xaxis.set_tick_params(labelbottom=False)
         if ii in last_row:
             ax.set_ylabel('Mean Wind Speed\n(m/s)')
             xtick = ax.get_xticks()
             ax.set_xticklabels(['Flor\n(n=7)', 'Floy\n(n=7)', 'Matt\n(n=6)'])
-            ax.set_ylim(15, 23)
+            ax.set_ylim(15.5, 22.5)
         if ii in last_in_row:
             ax.set_ylabel('')
             ax.yaxis.set_tick_params(labelbottom=False, labelleft=False)

@@ -77,13 +77,22 @@ if boxplot is True:
             stats.to_csv(f'{storm}_{climate}_driver_fldArea_stats.csv')
 
     # PLOTTING Boxplot of flooded area
+    nrow = 4
+    ncol = 1
+    n_subplots = nrow * ncol
+    first_in_row = np.arange(0, n_subplots, ncol)
+    last_in_row = np.arange(ncol - 1, n_subplots, ncol)
+    first_row = np.arange(0, ncol)
+    last_row = np.arange(first_in_row[-1], n_subplots, 1)
+
     props = dict(boxes="white", whiskers="black", caps="black")
     boxprops = dict(facecolor='white', linestyle='--', linewidth=1, color='black')
     flierprops = dict(marker='o', markerfacecolor='none', markersize=6, markeredgecolor='black')
     medianprops = dict(linestyle='-', linewidth=2, color='black')
     meanpointprops = dict(marker='D', markeredgecolor='black', markerfacecolor='lightgrey', markersize=6)
 
-    fig, axes = plt.subplots(nrows=4, ncols=1, tight_layout=True, figsize=(5, 6))
+    fig, axes = plt.subplots(nrows=nrow, ncols=ncol, tight_layout=True, figsize=(5, 6))
+    axes = axes.flatten()
     counter = 0
     for ax in axes:
         print(counter)
@@ -102,27 +111,34 @@ if boxplot is True:
                              layout=(3, 1),
                              zorder=1
                              )
-        ax.set_xticklabels(['Flor-Pres\n(n=7)', 'Flor-Fut\n(n=35)',
-                            'Floy-Pres\n(n=7)', 'Floy-Fut\n(n=35)',
-                            'Matt-Pres\n(n=6)', 'Matt-Fut\n(n=30)'])
+
         ax.set_ylim(np.floor(da_plot[scenarios[counter]].min()) - 10 ** 3,
-                    np.ceil(da_plot[scenarios[counter]].max()) + 10 ** 3
-                    )
+                    np.ceil(da_plot[scenarios[counter]].max()) + 10 ** 3)
+
+        if counter in last_row:
+            xtick = ax.get_xticks()
+            ax.set_xticklabels(['Flor-Pres\n(n=7)', 'Flor-Fut\n(n=35)',
+                                'Floy-Pres\n(n=7)', 'Floy-Fut\n(n=35)',
+                                'Matt-Pres\n(n=6)', 'Matt-Fut\n(n=30)'])
+        else:
+            ax.xaxis.set_tick_params(labelbottom=False)
+        ax.set_title(scenarios[counter])
         ax.set_xlabel(None)
         ax.set_ylabel('Peak Flooded\nArea (sq.km.)')
-        kwargs = dict(linestyle='-', linewidth=1, color='grey', alpha=0.8)
+        kwargs = dict(linestyle='--', linewidth=1, color='lightgrey', alpha=0.8)
         ax.grid(visible=True, which='major', axis='y', zorder=0, **kwargs)
         kwargs = dict(linestyle='--', linewidth=0.5, color='lightgrey', alpha=0.8)
         ax.grid(visible=True, which='minor', axis='y', zorder=0, **kwargs)
         ax.set_axisbelow(True)
         counter += 1
+
     plt.suptitle(None)
-    plt.subplots_adjust(wspace=0, hspace=0.15)
+    plt.subplots_adjust(wspace=0, hspace=0)
     plt.margins(x=0, y=0)
-    plt.savefig('driver_fldArea_boxplot.png', bbox_inches='tight', dpi=255)
+    plt.savefig('driver_fldArea_boxplot_clean.png', bbox_inches='tight', dpi=255)
     plt.close()
 
-boxplot_withEnsmean = True
+boxplot_withEnsmean = False
 if boxplot_withEnsmean is True:
     # Organize dataframe of ensemble means
     da_ensmean_plot = fld_area.drop(fld_area[fld_area['run'] != 'ensmean'].index)

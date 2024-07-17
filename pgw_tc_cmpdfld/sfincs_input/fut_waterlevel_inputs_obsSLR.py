@@ -63,12 +63,12 @@ dist = ss.uniform(loc=a, scale=(b - a))
 print(dist.mean())
 
 # Filepath to data catalogs yml
-yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'
+wl_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\waterlevel'
 yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\AGU2023\present_florence\ensmean' \
+root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_wrf\AGU2023\present_florence\ensmean' \
        r'\flor_ensmean_present'
-mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
-mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp')
+mod = SfincsModel(root=root, mode='r', data_libs=[yml_base])
+mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_wrf\tmp')
 mod.write()
 region = mod.mask.where(mod.mask == 2, 0).raster.vectorize()
 #
@@ -165,28 +165,30 @@ region = mod.mask.where(mod.mask == 2, 0).raster.vectorize()
 
 # NEW RUNS
 n_slr = 5
-storms = ['floy', 'matt', 'flor']
+storms = ['floy', 'flor', 'matt']
 slr_event_tracker = []
 for storm in storms:
-    climates = ['pres']
-    runs = [f'ensmean_SF{i}' for i in range(1, 9)]
+    runs = [f'SF{i}' for i in range(1, 9)]
     # Update model time before writing new boundary conditions
     if storm == 'flor':
         # Florence
         tref = '20180913 000000'
         tstart = tref
         tstop = '20180930 000000'
+        f = 'flor_FLRA.nc'
     elif storm == 'matt':
         # Matthew
         tref = '20161007 000000'
         tstart = tref
         tstop = '20161015 000000'
-        runs = [f'ensmean_SF{i}' for i in range(1, 8)]
+        runs = [f'SF{i}' for i in range(1, 8)]
+        f = 'matt_OWI.nc'
     elif storm == 'floy':
         # Floyd
-        tref = '19990913 000000'
-        tstart = '19990914 000000'
+        tref = '19990914 000000'
+        tstart = tref
         tstop = '19990922 000000'
+        f = 'floy_ERA5.nc'
 
     mod.setup_config(
         **{'crsgeo': mod.crs.to_epsg(),
@@ -196,62 +198,65 @@ for storm in storms:
 
     slr_scenarios = []
     slr_values = []
-    for climate in climates:
-        for run in runs:
-            # Creating water level inputs from ADCIRC output for pgw runs
-            wl_id = f'{storm}_{climate}_ensmean_waterlevel'
-            wl_df = mod.data_catalog.get_geodataset(data_like=wl_id, geom=region, buffer=500)
-            mod.setup_waterlevel_forcing(geodataset=wl_df,
-                                         offset='lmsl_to_navd88',  # converts mean sea level to NAVD88 datum SFINCS
-                                         timeseries=None, locations=None, buffer=500, merge=False)
-            mod.write_forcing(data_vars='bzs')
-            # Remove bad data points
-            # (Why? there are some points where there is no data in the offset raster available)
-            bzs = mod.forcing['bzs']
-            index_to_remove = bzs['index'][bzs.argmax().values.item()].values.item()
-            cleaned_bcs = bzs.drop_sel(index=index_to_remove)
 
-            counter = 0
-            while counter < n_slr:
-                slr = ss.uniform.rvs(loc=a, scale=(b - a), size=1)
-                event_id = f'{storm}_{climate}Scaled_{run}_SLR{counter + 1}'
-                slr_scenarios.append(event_id)
+    for run in runs:
+        # Creating water level inputs from ADCIRC output for pgw runs
+        wl_id = f'{storm}_hindcast'
+        x = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\hindcast\waterlevel',
+                         f)
+        wl_df = mod.data_catalog.get_geodataset(data_like=x, geom=region, buffer=500)
+        mod.setup_waterlevel_forcing(geodataset=wl_df,
+                                     offset='lmsl_to_navd88',  # converts mean sea level to NAVD88 datum SFINCS
+                                     timeseries=None, locations=None, buffer=500, merge=False)
+        mod.write_forcing(data_vars='bzs')
+        # Remove bad data points
+        # (Why? there are some points where there is no data in the offset raster available)
+        bzs = mod.forcing['bzs']
+        index_to_remove = bzs['index'][bzs.argmax().values.item()].values.item()
+        cleaned_bcs = bzs.drop_sel(index=index_to_remove)
 
-                slr_values.append(slr)
-                slr_bcs = cleaned_bcs + slr
-                mod.setup_waterlevel_forcing(geodataset=slr_bcs, timeseries=None, locations=None, buffer=500,
-                                             merge=False)
-                mod.write_forcing()  # this creates the sfincs.bnd and sfincs.bzs input files
+        counter = 0
+        while counter < n_slr:
+            slr = ss.uniform.rvs(loc=a, scale=(b - a), size=1)
+            event_id = f'{storm}_fut_{run}_SLR{counter + 1}'
+            slr_scenarios.append(event_id)
 
-                dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models',
-                                       'waterlevel_ensmean_slr')
+            slr_values.append(slr)
+            slr_bcs = cleaned_bcs + slr
+            mod.setup_waterlevel_forcing(geodataset=slr_bcs, timeseries=None, locations=None, buffer=500,
+                                         merge=False)
+            mod.write_forcing()  # this creates the sfincs.bnd and sfincs.bzs input files
 
-                if os.path.exists(dir_out) is False:
-                    os.makedirs(dir_out)
-                shutil.move(src=os.path.join(mod.root, 'sfincs.bnd'),
-                            dst=os.path.join(dir_out, f'{event_id}_waterlevel.bnd'))
-                shutil.move(src=os.path.join(mod.root, 'sfincs.bzs'),
-                            dst=os.path.join(dir_out, f'{event_id}_waterlevel.bzs'))
+            dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs',
+                                   'waterlevel')
 
-                counter += 1
-
-                # # Plot the output for the event to make sure it makes sense
-                # dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\forcing_figs_slr')
-                # if os.path.exists(dir_out) is False:
-                #     os.makedirs(dir_out)
-                # figout = os.path.join(dir_out, f'{event_id}.png')
-                # fig, axes = mod.plot_forcing(forcings='bzs')
-                # for ax in axes:
-                #     ax.legend().remove()
-                #     ax.set_title('')
-                # plt.subplots_adjust(left=0.12, wspace=0.05, hspace=0.25, top=0.925, bottom=0.15)
-                # plt.suptitle(event_id)
-                # plt.savefig(figout)
-                # plt.close()
+            if os.path.exists(dir_out) is False:
+                os.makedirs(dir_out)
+            shutil.move(src=os.path.join(mod.root, 'sfincs.bnd'),
+                        dst=os.path.join(dir_out, f'{event_id}_waterlevel.bnd'))
+            shutil.move(src=os.path.join(mod.root, 'sfincs.bzs'),
+                        dst=os.path.join(dir_out, f'{event_id}_waterlevel.bzs'))
+            print(counter)
+            counter += 1
+            # # Plot the output for the event to make sure it makes sense
+            # dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_hindcast\forcing_figs')
+            # if os.path.exists(dir_out) is False:
+            #     os.makedirs(dir_out)
+            # figout = os.path.join(dir_out, f'{event_id}.png')
+            # fig, axes = mod.plot_forcing(forcings='bzs')
+            # for ax in axes:
+            #     ax.legend().remove()
+            #     ax.set_title('')
+            # plt.subplots_adjust(left=0.12, wspace=0.05, hspace=0.25, top=0.925, bottom=0.15)
+            # plt.suptitle(event_id)
+            # plt.savefig(figout)
+            # plt.close()
 
     slr_events = pd.DataFrame(slr_values)
     slr_events.index = slr_scenarios
     slr_event_tracker.append(slr_events)
+    print(storm)
 
 event_db = pd.concat(slr_event_tracker)
-event_db.to_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\ensmean_slr_event_ids.csv', header=False)
+event_db.to_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\hindcast_slr_event_ids.csv',
+                header=False)

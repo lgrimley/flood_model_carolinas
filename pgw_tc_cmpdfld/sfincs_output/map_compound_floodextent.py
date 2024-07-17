@@ -54,34 +54,59 @@ utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
 
 # Directory to output stuff
 os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis')
-fld_da_compound = xr.open_dataarray('pgw_compound_extent.nc')
+fld_da_compound = xr.open_dataarray(os.path.join(os.getcwd(), 'driver_analysis', 'pgw_compound_extent_all.nc'))
+fld_da_ensmean = xr.open_dataarray(os.path.join(os.getcwd(), 'driver_analysis', 'pgw_compound_extent_ensmean_max.nc'))
 
 storms = ['flor', 'floy', 'matt']
 da_cmpd_diff = []
 da_cmpd_pres = []
 da_cmpd_fut = []
 
-# Ensemble means
+# WRF Ensemble mean
+# for storm in storms:
+#     # Present
+#     runs = [f'{storm}_pres_ensmean']
+#     ds = fld_da_compound.sel(run=runs).sum(dim='run')
+#     ds.name = f'{storm}_pres_ensmean'
+#     da_cmpd_pres.append(ds)
+#     # Get extent
+#     ds_ensmean_pres = get_compound_flood_extent(runs=runs, da=fld_da_compound, value=1,
+#                                                 name=f'{storm}_pres_ensmean', write_tif=False)
+#     # Future
+#     slr_runs = [f'{storm}_presScaled_ensmean_SLR{i}' for i in np.arange(1, 6, 1)]
+#     ds = fld_da_compound.sel(run=slr_runs).sum(dim='run')
+#     ds.name = f'{storm}_fut_ensmean'
+#     da_cmpd_fut.append(ds)
+#     ds_ensmean_fut = get_compound_flood_extent(runs=slr_runs, da=fld_da_compound, value=3,
+#                                                name=f'{storm}_fut_ensmean', write_tif=False)
+#
+#     # diff == 3 is compound in the future only, diff == 2 is compound in the future and present
+#     # diff == 1 is compound in the present only
+#     diff = (ds_ensmean_fut - ds_ensmean_pres).compute()
+#     diff = xr.where(diff == -1, 1, diff)
+#     diff.name = f'{storm}_fut_minus_pres_ensmean'
+#     da_cmpd_diff.append(diff)
+
+# SFINCS Ensemble mean - MAX
 for storm in storms:
-    # Present WRF
+    # Present
     runs = [f'{storm}_pres_ensmean']
-    ds = fld_da_compound.sel(run=runs).sum(dim='run')
+    ds = fld_da_ensmean.sel(run=runs).sum(dim='run')
     ds.name = f'{storm}_pres_ensmean'
     da_cmpd_pres.append(ds)
-    # Get extent
-    ds_ensmean_pres = get_compound_flood_extent(runs=runs, da=fld_da_compound, value=1,
-                                                name=f'{storm}_pres_ensmean', write_tif=False)
-    # Present WRF Scaled
-    slr_runs = [f'{storm}_presScaled_ensmean_SLR{i}' for i in np.arange(1, 6, 1)]
-    ds = fld_da_compound.sel(run=slr_runs).sum(dim='run')
-    ds.name = f'{storm}_fut_ensmean'
+    ds_ensmean_pres = get_compound_flood_extent(runs=runs, da=fld_da_ensmean, value=1,
+                                                name=ds.name, write_tif=False)
+    # Future
+    runs = [f'{storm}_presScaled_ensmean']
+    ds = fld_da_ensmean.sel(run=runs).sum(dim='run')
+    ds.name = f'{storm}_presScaled_ensmean'
     da_cmpd_fut.append(ds)
-    ds_ensmean_fut = get_compound_flood_extent(runs=slr_runs, da=fld_da_compound, value=3,
-                                               name=f'{storm}_fut_ensmean', write_tif=False)
+    ds_ensmean_fut = get_compound_flood_extent(runs=runs, da=fld_da_ensmean, value=3,
+                                               name=ds.name, write_tif=False)
 
     # diff == 3 is compound in the future only, diff == 2 is compound in the future and present
     # diff == 1 is compound in the present only
-    diff = (ds_ensmean_fut - ds_ensmean_pres).compute()
+    diff = (ds_ensmean_fut[0] - ds_ensmean_pres[0]).compute()
     diff = xr.where(diff == -1, 1, diff)
     diff.name = f'{storm}_fut_minus_pres_ensmean'
     da_cmpd_diff.append(diff)
@@ -143,7 +168,7 @@ polygon = shapely.geometry.box(*zoom_newport)
 
 plot_entire_domain = True
 if plot_entire_domain is True:
-    nrow = 3
+    nrow = 4
     ncol = 3
     n_subplots = nrow * ncol
     first_in_row = np.arange(0, n_subplots, ncol)
@@ -152,13 +177,23 @@ if plot_entire_domain is True:
     last_row = np.arange(first_in_row[-1], n_subplots, 1)
 
     fig, axes = plt.subplots(nrows=nrow, ncols=ncol,
-                             figsize=(6, 4.5), subplot_kw={'projection': utm},
+                             figsize=(6, 6), subplot_kw={'projection': utm},
                              sharex=True, sharey=True, tight_layout=True)
     axes = axes.flatten()
+    counter1 = 3
     counter = 3
     for i in range(len(axes)):
         ax = axes[i]
-        if i in last_row:
+        if i in [6, 7, 8]:
+            dsp1 = da_cmpd_pres[counter1]
+            dsp1 = dsp1.where(dsp1 > 0)
+            print(dsp1.name)
+            cmap = 'Reds'
+            norm = mpl.colors.Normalize(vmin=1, vmax=7)
+            cs2 = dsp1.plot(ax=ax, cmap=cmap, norm=norm, extend='neither', shading='auto',
+                            add_colorbar=False, zorder=2, alpha=1)
+            counter1 += 1
+        elif i in last_row:
             dsp1 = da_cmpd_fut[counter]
             dsp1 = dsp1.where(dsp1 > 0)
             print(dsp1.name)
@@ -186,7 +221,7 @@ if plot_entire_domain is True:
         ax.set_aspect('equal')
         ax.set_axis_off()
 
-    row_names = ['Ensemble Mean', 'Ensemble', 'Fut Ensemble']
+    row_names = ['Ensemble Mean', 'Ensemble', 'Pres Ensemble', 'Fut Ensemble']
     tick_labels = [['Present\n(n=1)', 'Both', 'Future\n(n=5)'],
                    ['Present\n(n=7-7-6)', 'Both', 'Future\n(n=35-35-30)']]
     for kk in range(nrow):
@@ -197,6 +232,14 @@ if plot_entire_domain is True:
                                     transform=axes[first_in_row[kk]].transAxes)
         pos0 = axes[last_in_row[kk]].get_position()  # get the original position
         if kk == 2:
+            cax2 = fig.add_axes([pos0.x1 + 0.1, pos0.y0, 0.05, pos0.height * 0.7])
+            cbar2 = fig.colorbar(cs2,
+                                 cax=cax2,
+                                 orientation='vertical',
+                                 ticks=[1, 4, 7],
+                                 label='Compound\nFrequency'
+                                 )
+        elif kk == 3:
             cax1 = fig.add_axes([pos0.x1 + 0.1, pos0.y0, 0.05, pos0.height * 0.7])
             cbar1 = fig.colorbar(cs1,
                                  cax=cax1,
@@ -216,7 +259,7 @@ if plot_entire_domain is True:
     plt.subplots_adjust(wspace=0, hspace=0.0)  # , top=0.92)
     plt.margins(x=0, y=0)
     # plt.suptitle('Compound Peak Flood Extent')
-    plt.savefig(fr'compound_flood_extent_domain2.png', dpi=225, bbox_inches="tight")
+    plt.savefig(fr'test.png', dpi=225, bbox_inches="tight")
     plt.close()
 
 plot_NewPort = True

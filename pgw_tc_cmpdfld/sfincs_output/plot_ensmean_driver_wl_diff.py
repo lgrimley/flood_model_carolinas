@@ -17,7 +17,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 from matplotlib.ticker import FormatStrFormatter
 
-
 work_dir = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\analysis'
 out_dir = os.path.join(work_dir, 'ensemble_mean')
 if os.path.exists(out_dir) is False:
@@ -79,7 +78,9 @@ for type in ['mean', 'max']:
             diff.name = f'{storm}_{scenario}'
             ds_plot.append(diff)
 
-    plot_ensmean_diff_by_driver = True
+    col_title = ['Coastal', 'Runoff', 'Compound']
+    row_titles = ['Florence', 'Floyd', 'Matthew']
+    plot_ensmean_diff_by_driver = False
     if plot_ensmean_diff_by_driver is True:
         # Plotting info
         wkt = mod.grid['dep'].raster.crs.to_wkt()
@@ -108,7 +109,7 @@ for type in ['mean', 'max']:
         axes = axes.flatten()
         counter = 0
         for ax in axes:
-            ckwargs = dict(cmap='seismic', vmin=-3, vmax=3)
+            ckwargs = dict(cmap='seismic', vmin=-2, vmax=2)
             cs = ds_plot[counter].plot(ax=ax,
                                        add_colorbar=False,
                                        **ckwargs,
@@ -120,9 +121,9 @@ for type in ['mean', 'max']:
             ax.set_title('')
             ax.set_axis_off()
             if counter in first_row:
-                ax.set_title(scenarios[counter], loc='center', fontsize=10)
+                ax.set_title(col_title[counter], loc='center', fontsize=10)
             for i in range(len(first_in_row)):
-                axes[first_in_row[i]].text(-0.05, 0.5, storms[i],
+                axes[first_in_row[i]].text(-0.05, 0.5, row_titles[i],
                                            horizontalalignment='right',
                                            verticalalignment='center',
                                            rotation='vertical',
@@ -132,8 +133,12 @@ for type in ['mean', 'max']:
         label = 'Diff. in Peak Depth (m)\nFuture minus Present'
         ax = axes[5]
         pos0 = ax.get_position()  # get the original position
-        cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.0, 0.025, pos0.height * 1.2])
-        cbar2 = fig.colorbar(cs, cax=cax, orientation='vertical', label=label, extend='both')
+        cax = fig.add_axes([pos0.x1 + 0.02, pos0.y0 + pos0.height * -0.2, 0.025, pos0.height * 1.2])
+        cbar2 = fig.colorbar(cs, cax=cax,
+                             orientation='vertical',
+                             label=label,
+                             ticks=[-2, -1, 0, 1, 2],
+                             extend='both')
 
         plt.subplots_adjust(wspace=0.0, hspace=0.0)
         plt.margins(x=0, y=0)
@@ -141,3 +146,14 @@ for type in ['mean', 'max']:
                     tight_layout=True, constrained_layout=True,
                     bbox_inches='tight', dpi=255)
         plt.close()
+
+
+    df_dep_stats = pd.DataFrame()
+    for ds in ds_plot:
+        ds = xr.where(ds == 0, np.nan, ds)
+        #ds = ds.where(ds > 0)
+        df = ds.to_dataframe().dropna(how='any', axis=0)
+        df = df.drop(columns='spatial_ref')
+        df_stats = df.describe(percentiles=[0.05, 0.25, 0.5, 0.75, 0.95])
+        df_dep_stats = pd.concat([df_dep_stats, df_stats], ignore_index=False, axis=1)
+        df_dep_stats.to_csv(f'change_in_depth_stats_by_driver_{type}.csv')

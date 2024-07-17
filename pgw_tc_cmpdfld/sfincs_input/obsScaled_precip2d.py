@@ -15,14 +15,13 @@ import cartopy.crs as ccrs
 import scipy.stats as ss
 
 # Filepath to data catalogs yml
-yml_pgw = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_input\data_catalog_pgw.yml'
 yml_base = r'Z:\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 
 # Working directory and model root
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\AGU2023\present_florence\ensmean' \
+root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_wrf\AGU2023\present_florence\ensmean' \
        r'\flor_ensmean_present'
-mod = SfincsModel(root=root, mode='r', data_libs=[yml_pgw, yml_base])
-mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp')
+mod = SfincsModel(root=root, mode='r', data_libs=[yml_base])
+mod.update(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\tmp')
 mod.write()
 
 # Creating meteo inputs from present scaled scenario
@@ -44,7 +43,7 @@ last_in_row = np.arange(ncol - 1, n_subplots, ncol)
 first_row = np.arange(0, ncol - 1)
 last_row = np.arange(ncol, n_subplots, 1)
 
-dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_hindcast', 'precip2d')
+dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs', 'precip2d')
 # for filename in os.listdir(dir_out):
 #     storm, climate, run, variable = filename.split('_')
 #     if climate == 'pres':
@@ -131,9 +130,9 @@ dir_out = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_mo
 sf_df['storm'] = [i.split('_')[0] for i in sf_df.index]
 sf_df['run'] = [i.split('_')[1] for i in sf_df.index]
 sf_df = sf_df[sf_df['run'] != 'ensmean']
-storms = ['flor', 'floy', 'matt']
+storms = ['floy', 'flor', 'matt']
 for storm in storms:
-    pres_precip = xr.open_dataarray(os.path.join(dir_out, f'{storm}_pres_ensmean_precip2d.nc'))
+    pres_precip = xr.open_dataarray(os.path.join(dir_out, f'{storm}_pres_precip2d.nc'))
     sf_storm = sf_df[sf_df['storm'] == storm]
 
     mean = [sf_storm['multiplier'].mean()]
@@ -142,8 +141,8 @@ for storm in storms:
     counter = 1
     for m in multipliers:
         precip_scaled = pres_precip * m
-        # fileout = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\precip2d_ensmean',
-        #                        f'{storm}_presScaled_ensmean_SF{counter}_precip2d.nc')
-        # precip_scaled.to_netcdf(fileout)
+        fileout = os.path.join(dir_out,
+                               f'{storm}_fut_SF{counter}_precip2d.nc')
+        precip_scaled.to_netcdf(fileout)
         counter += 1
 
