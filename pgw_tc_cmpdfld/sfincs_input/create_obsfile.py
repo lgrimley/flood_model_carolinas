@@ -10,7 +10,7 @@ import geopandas as gpd
 yml = os.path.join(r'Z:\users\lelise\data', 'data_catalog_SFINCS_Carolinas.yml')
 cat = hydromt.DataCatalog(yml)
 
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\tmp'
+root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\arch_hindcast\flor_pres_compound'
 mod = SfincsModel(root=root, mode='r+', data_libs=[yml])
 
 # USGS locations
@@ -67,13 +67,14 @@ obs_df_out.to_csv(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\
 
 # Read back in data and clip to the domain
 clipped = mod.data_catalog.get_geodataframe(
-    data_like=r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\carolinas_obs_locs2.csv',
+    data_like=r'Z:\users\lelise\projects\ENC_CompFld\carolinas_obs_locs2.csv',
     geom=mod.region,
     crs=4326).to_crs(mod.crs)
 clipped.columns = ['name', 'geometry']
 
+c = clipped.drop_duplicates(subset='geometry', keep='first')
 
-with open(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models\sfincs_his_locs2.obs', mode='w') as obs_file:
+with open(r'Z:\users\lelise\projects\ENC_CompFld\sfincs_his_locs2.obs', mode='w') as obs_file:
     for i in range(len(clipped)):
         x = clipped.geometry.x.values.round(2)[i]
         y = clipped.geometry.y.values.round(2)[i]

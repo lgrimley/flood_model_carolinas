@@ -12,4 +12,4 @@ module purge
 
 conda activate hydromt-sfincs-dev
 
-time srun python -u /projects/sfincs/build_sfincs_ENC.py
+time srun python -u /projects/sfincs/build_sfincs_ENC_200m_sbg5m_noChannels.py
