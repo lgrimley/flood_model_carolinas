@@ -17,25 +17,41 @@ import cartopy.crs as ccrs
 import hydromt
 from hydromt import DataCatalog
 import hydromt_sfincs
-from hydromt_sfincs import SfincsModel
+from hydromt_sfincs import SfincsModel, utils
 
 # Specify location of damage data
 damage_gdb = r'Z:\users\lelise\geospatial\flood_damage\included_data.gdb'
 
 # Load the model the results
-model_root = r'Z:\users\lelise\projects\Carolinas\Chapter1\sfincs\2016_Matthew\matt_hindcast_v6_200m_LPD2m_avgN'
-mod = SfincsModel(root=model_root, mode='r')
+# Load in model and read results
+cat_dir = r'Z:\users\lelise\data'
+yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
+yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
+yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
+
+os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
+model_root = 'ENC_200m_sbg5m_avgN_adv1_eff75'
+mod = SfincsModel(root=model_root, mode='r',
+                  data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
+cat = mod.data_catalog
 mod.read_results()
 
 # Load data catalog and files
-cat = hydromt.DataCatalog(r'Z:\users\lelise\data\data_catalog.yml')
 studyarea = mod.region
-dem = cat.get_rasterdataset(data_like=os.path.join(r'Z:\users\lelise\projects\Carolinas\Chapter1\sfincs\2018_Florence'
-                                                   r'\mod_v6\flo_hindcast_v6_200m_LPD2m_avgN\subgrid\dep_subgrid.tif'),
-                            geom=studyarea)
-sbgfldpth = cat.get_rasterdataset(data_like=r'Z:\users\lelise\projects\Carolinas\Chapter1\sfincs\2016_Matthew'
-                                            r'\matt_hindcast_v6_200m_LPD2m_avgN\floodmap_0.05_hmin.tif',
+dem = cat.get_rasterdataset(
+    data_like=os.path.join(os.getcwd(), 'ENC_200m_sbg5m_avgN_adv1_eff50_compound', 'subgrid', 'dep_subgrid.tif'),
+    geom=studyarea)
+sbgfldpth = cat.get_rasterdataset(data_like=os.path.join(os.getcwd(), 'floodmaps', 'compound_floodmap.tif'),
                                   geom=studyarea)
+
+# dem = mod.grid['dep']
+# sbgfldpth = utils.downscale_floodmap(
+#         zsmax=mod.results["zsmax"].max(dim='timemax'),
+#         dep=mod.grid['dep'],
+#         hmin=0.05,
+#         gdf_mask=mod.region,
+#         reproj_method='bilinear'
+#     )
 
 # Setup output directory
 out_dir1 = os.path.join(model_root, 'validation', 'nfip_damage')
@@ -109,8 +125,9 @@ def get_building_event_damage_status(joined_gdb_filepath, studyarea_gdf, tstart=
 
 buildings = get_building_event_damage_status(joined_gdb_filepath=damage_gdb,
                                              studyarea_gdf=studyarea,
-                                             tstart='2016-09-27',
-                                             tend='2016-10-16')
+                                             tstart='2018-09-07',
+                                             tend='2018-09-30')
+# Matthew : tstart='2016-09-27', tend='2016-10-16'
 
 ''' PART 2 - Calculate flood depth information at buildings'''
 
@@ -145,17 +162,19 @@ def calculate_flood_depths_at_pt(gdf, waterdepth_da, waterlevel_da=None, terrain
     return gdf
 
 
-buildings = calculate_flood_depths_at_pt(gdf=buildings.to_crs(mod.crs),
-                                         waterdepth_da=sbgfldpth,
-                                         waterlevel_da=mod.results['zsmax'].max(dim='timemax'),
-                                         terrain_da=dem)
-pd.DataFrame(buildings.drop(columns='geometry')).to_csv(os.path.join(out_dir1, 'depth_at_event_nfip_buildings.csv'),
-                                                        sep=',')
-
-buildings = pd.read_csv(os.path.join(out_dir1, 'depth_at_event_nfip_buildings.csv'))
+buildings_file = os.path.join(out_dir1, 'depth_at_event_nfip_buildings.csv')
+if os.path.exists(buildings_file) is False:
+    buildings = calculate_flood_depths_at_pt(gdf=buildings.to_crs(mod.crs),
+                                             waterdepth_da=sbgfldpth,
+                                             waterlevel_da=mod.results['zsmax'].max(dim='timemax'),
+                                             terrain_da=dem)
+    pd.DataFrame(buildings.drop(columns='geometry')).to_csv(os.path.join(out_dir1, 'depth_at_event_nfip_buildings.csv'),
+                                                            sep=',')
+else:
+    buildings = pd.read_csv(buildings_file)
 buildings['elev_grp'] = 'xx'
-buildings['elev_grp'][buildings['gnd_elev'] <= 15.0] = 'Coastal (Elevation <= 15m)'
-buildings['elev_grp'][(buildings['gnd_elev'] > 15.0)] = 'Inland (Elevation > 15m)'
+buildings['elev_grp'][buildings['gnd_elev'] <= 20.0] = 'Elevation <= 20m)'
+buildings['elev_grp'][(buildings['gnd_elev'] > 20.0)] = 'Elevation > 20m)'
 
 ''' PART 3 - Flag flooded and non flooded hits/misses '''
 
@@ -181,233 +200,228 @@ def hit_miss_flags(gdf, depth_threshold=None):
     return gdf
 
 
-hmin = 0.5
-out_dir = os.path.join(out_dir1, ('depth_threshold_' + str(hmin)))
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
+depth_thresholds = [0.92] #0.05, 0.1, 0.5, 1.0, 1.5, 2.0, 2.5]
+for hmin in depth_thresholds:
+    out_dir = os.path.join(os.getcwd(), out_dir1)
+    buildings.loc[buildings['hmax'].isna(), 'hmax'] = -9999.0  # Set no data to -9999.0 (e.g., zero water depth)
+    buildings = hit_miss_flags(gdf=buildings[buildings['event_damage_status'].notna()], depth_threshold=hmin)
 
-buildings.loc[buildings['hmax'].isna(), 'hmax'] = -9999.0  # Set no data to -9999.0 (e.g., zero water depth)
-buildings = hit_miss_flags(gdf=buildings[buildings['event_damage_status'].notna()], depth_threshold=hmin)
+    # Plotting
+    # font = {'family': 'Arial',
+    #         'size': 10}
+    # mpl.rc('font', **font)
+    # mpl.rcParams.update({'axes.titlesize': 10})
+    #
+    # props = dict(boxes="white", whiskers="black", caps="black")
+    # boxprops = dict(facecolor='white', linestyle='--', linewidth=1, color='black')
+    # flierprops = dict(marker='+', markerfacecolor='none', markersize=3,
+    #                   markeredgecolor='black')
+    # medianprops = dict(linestyle='-', linewidth=2, color='black')
+    # meanpointprops = dict(marker='D',
+    #                       markeredgecolor='black',
+    #                       markerfacecolor='lightgrey',
+    #                       markersize=4)
+    # fig, axs = plt.subplots(nrows=1, ncols=1, tight_layout=True, figsize=(6, 3))
+    # bp = flooded_buildings['hmax'].plot.box(ax=axs,
+    #                                         vert=False,
+    #                                         color=props,
+    #                                         boxprops=boxprops,
+    #                                         flierprops=flierprops,
+    #                                         medianprops=medianprops,
+    #                                         meanprops=meanpointprops,
+    #                                         meanline=False,
+    #                                         showmeans=True,
+    #                                         patch_artist=True)
+    # axs.set_xlabel('NC Water Depth (m) at Buildings w/ NFIP Claim')
+    # # axs.set_yticklabels([f'Compound\n(n={nc_n[0]})', f'Coastal\n(n={nc_n[1]})', f'Runoff\n(n={nc_n[2]})'])
+    # kwargs = dict(linestyle='--', linewidth=0.75, color='lightgrey', alpha=0.8)
+    # axs.grid(visible=True, which='major', axis='x', **kwargs)
+    # #axs.set_xscale("log")
+    # axs.set_xlim(0, 10)
+    # pos1 = axs.get_position()  # get the original position
+    # plt.margins(x=0, y=0)
+    # plt.savefig(os.path.join(out_dir1, 'depth_at_structures.png'),
+    #             dpi=225,
+    #             bbox_inches="tight")
+    # plt.close()
 
-# Plotting
-# font = {'family': 'Arial',
-#         'size': 10}
-# mpl.rc('font', **font)
-# mpl.rcParams.update({'axes.titlesize': 10})
-#
-# props = dict(boxes="white", whiskers="black", caps="black")
-# boxprops = dict(facecolor='white', linestyle='--', linewidth=1, color='black')
-# flierprops = dict(marker='+', markerfacecolor='none', markersize=3,
-#                   markeredgecolor='black')
-# medianprops = dict(linestyle='-', linewidth=2, color='black')
-# meanpointprops = dict(marker='D',
-#                       markeredgecolor='black',
-#                       markerfacecolor='lightgrey',
-#                       markersize=4)
-# fig, axs = plt.subplots(nrows=1, ncols=1, tight_layout=True, figsize=(6, 3))
-# bp = flooded_buildings['hmax'].plot.box(ax=axs,
-#                                         vert=False,
-#                                         color=props,
-#                                         boxprops=boxprops,
-#                                         flierprops=flierprops,
-#                                         medianprops=medianprops,
-#                                         meanprops=meanpointprops,
-#                                         meanline=False,
-#                                         showmeans=True,
-#                                         patch_artist=True)
-# axs.set_xlabel('NC Water Depth (m) at Buildings w/ NFIP Claim')
-# # axs.set_yticklabels([f'Compound\n(n={nc_n[0]})', f'Coastal\n(n={nc_n[1]})', f'Runoff\n(n={nc_n[2]})'])
-# kwargs = dict(linestyle='--', linewidth=0.75, color='lightgrey', alpha=0.8)
-# axs.grid(visible=True, which='major', axis='x', **kwargs)
-# #axs.set_xscale("log")
-# axs.set_xlim(0, 10)
-# pos1 = axs.get_position()  # get the original position
-# plt.margins(x=0, y=0)
-# plt.savefig(os.path.join(out_dir1, 'depth_at_structures.png'),
-#             dpi=225,
-#             bbox_inches="tight")
-# plt.close()
+    # Save to shapefile and txt file
+    # pd.DataFrame(buildings.drop(columns='geometry')).to_csv(os.path.join(out_dir, 'coastal_clipped_buildings.csv'), sep=',')
 
-
-# Save to shapefile and txt file
-# pd.DataFrame(buildings.drop(columns='geometry')).to_csv(os.path.join(out_dir, 'coastal_clipped_buildings.csv'), sep=',')
-
-
-''' PART 4 - Confusion Matrix '''
+    ''' PART 4 - Confusion Matrix '''
 
 
-def forecast_scores(x, y, z, w):
-    # https://www.cawcr.gov.au/projects/verification/
-    scores = pd.DataFrame(columns=['Name', 'Score', 'Perfect Score'])
-    scores['Name'] = ['Hits', 'Misses', 'False Alarm', 'Correct Non-forecast', 'Events', 'Cases',
-                      'Accuracy', 'Bias', 'POD', 'FAR', 'POFD', 'Success Ratio', 'Critical Success Index']
-    scores['Perfect Score'] = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 1, 0, 1, 0, 0, 1, 1]
-    events = x + y
-    cases = events + z + w
+    def forecast_scores(x, y, z, w):
+        # https://www.cawcr.gov.au/projects/verification/
+        scores = pd.DataFrame(columns=['Name', 'Score', 'Perfect Score'])
+        scores['Name'] = ['Hits', 'Misses', 'False Alarm', 'Correct Non-forecast', 'Events', 'Cases',
+                          'Accuracy', 'Bias', 'POD', 'FAR', 'POFD', 'Success Ratio', 'Critical Success Index']
+        scores['Perfect Score'] = [np.nan, np.nan, np.nan, np.nan, np.nan, np.nan, 1, 0, 1, 0, 0, 1, 1]
+        events = x + y
+        cases = events + z + w
 
-    # accuracy = hits + correct negatives / total
-    accuracy = (x + w) / cases
+        # accuracy = hits + correct negatives / total
+        accuracy = (x + w) / cases
 
-    # Bias score (frequency bias)
-    bias = (x + z) / events
-    bias = bias - 1
+        # Bias score (frequency bias)
+        bias = (x + z) / events
+        bias = bias - 1
 
-    # POD (hit rate) = probability of detection (pod=x/e); The percent of events that are forecasted/predicted
-    pod = x / events
+        # POD (hit rate) = probability of detection (pod=x/e); The percent of events that are forecasted/predicted
+        pod = x / events
 
-    # FAR = false alarm rate (far=z/(x+z))
-    # Measure of failure; ratio of unsuccessful forecasts to the total number of positive forecasts
-    far = z / (x + z)
+        # FAR = false alarm rate (far=z/(x+z))
+        # Measure of failure; ratio of unsuccessful forecasts to the total number of positive forecasts
+        far = z / (x + z)
 
-    # Probability of false detection (false alarm rate); POFD = z / (z+w)
-    pofd = z / (z + w)
+        # Probability of false detection (false alarm rate); POFD = z / (z+w)
+        pofd = z / (z + w)
 
-    # sr = success ratio; sr=x/(x+z)
-    sr = x / (x + z)
+        # sr = success ratio; sr=x/(x+z)
+        sr = x / (x + z)
 
-    # csi = critical success index; csi=x/(x+y+z)
-    # ratio of the number of hits to the number of events plus the number of false alarms
-    csi = x / (events + z)
+        # csi = critical success index; csi=x/(x+y+z)
+        # ratio of the number of hits to the number of events plus the number of false alarms
+        csi = x / (events + z)
 
-    scores['Score'] = np.around([x, y, z, w, events, cases, accuracy, bias, pod, far, pofd, sr, csi], decimals=2)
+        scores['Score'] = np.around([x, y, z, w, events, cases, accuracy, bias, pod, far, pofd, sr, csi], decimals=2)
 
-    return scores
+        return scores
 
 
-# x = number of hits
-# Number of claims that had a flood depth over the threshold
-# y = number of misses
-# Number of claims that did NOT have a modeled flood depth over the threshold
-# z = false alarms (e.g., predicting water where none is reported)
-# Number of policies that had a modeled flood depth over the threshold, but no claim was made
-# w = correct negative forecasts (e.g., correct non-forecasts)
-# Number of policies that did NOT have a modeled flood depth over the threshold and also no claim
+    # x = number of hits
+    # Number of claims that had a flood depth over the threshold
+    # y = number of misses
+    # Number of claims that did NOT have a modeled flood depth over the threshold
+    # z = false alarms (e.g., predicting water where none is reported)
+    # Number of policies that had a modeled flood depth over the threshold, but no claim was made
+    # w = correct negative forecasts (e.g., correct non-forecasts)
+    # Number of policies that did NOT have a modeled flood depth over the threshold and also no claim
 
-flooded = buildings[~buildings['flood_hitmiss'].isna()]  # remove nans
-flooded_hits = flooded[flooded['flood_hitmiss'] == 1]
-flooded_miss = flooded[flooded['flood_hitmiss'] == 0]
+    flooded = buildings[~buildings['flood_hitmiss'].isna()]  # remove nans
+    flooded_hits = flooded[flooded['flood_hitmiss'] == 1]
+    flooded_miss = flooded[flooded['flood_hitmiss'] == 0]
 
-nonflooded = buildings[~buildings['nonflood_hitmiss'].isna()]  # remove nans
-nonflooded_hits = nonflooded[nonflooded['nonflood_hitmiss'] == 1]
-nonflooded_misses = nonflooded[nonflooded['nonflood_hitmiss'] == 0]
+    nonflooded = buildings[~buildings['nonflood_hitmiss'].isna()]  # remove nans
+    nonflooded_hits = nonflooded[nonflooded['nonflood_hitmiss'] == 1]
+    nonflooded_misses = nonflooded[nonflooded['nonflood_hitmiss'] == 0]
 
-# flooded_hits.to_file(os.path.join(out_dir, 'hits.shp'))
-# flooded_miss.to_file(os.path.join(out_dir, 'misses.shp'))
-# nonflooded_hits.to_file(os.path.join(out_dir, 'correct_nonforecast.shp'))
-# nonflooded_misses.to_file(os.path.join(out_dir, 'false_alarm.shp'))
+    # flooded_hits.to_file(os.path.join(out_dir, 'hits.shp'))
+    # flooded_miss.to_file(os.path.join(out_dir, 'misses.shp'))
+    # nonflooded_hits.to_file(os.path.join(out_dir, 'correct_nonforecast.shp'))
+    # nonflooded_misses.to_file(os.path.join(out_dir, 'false_alarm.shp'))
 
-x, y = buildings['flood_hitmiss'].value_counts()
-w, z = buildings['nonflood_hitmiss'].value_counts()
-scores = forecast_scores(x, y, z, w)
-scores.to_csv(os.path.join(out_dir, 'forecasting_scores.csv'))
-
-''' PART 5 - Plotting '''
-font = {'family': 'Times New Roman',
-        'size': 10}
-mpl.rc('font', **font)
-
-# Plotting the data on a map with contextual layers
-layers_dict = {
-    'lyr1': {'dataset': 'enc_domain_HUC6_clipped',
-             'color': 'grey',
-             'edgecolor': 'none',
-             'linewidth': 0,
-             'alpha': 0.25,
-             'zorder': 0,
-             },
-    'lyr2': {'dataset': 'carolinas_coastal_wb',
-             'color': 'steelblue',
-             'edgecolor': 'none',
-             'linewidth': 0,
-             'alpha': 1,
-             'zorder': 1,
-             },
-    'lyr3': {'dataset': 'carolinas_major_rivers',
-             'color': 'steelblue',
-             'edgecolor': 'steelblue',
-             'linewidth': 0.5,
-             'alpha': 1,
-             'zorder': 1,
-             },
-    'lyr4': {'dataset': r'Z:\users\lelise\geospatial\fris\bathy_v5\NHDArea_LowerPeeDee.shp',
-             'color': 'steelblue',
-             'edgecolor': 'steelblue',
-             'linewidth': 0.5,
-             'alpha': 1,
-             'zorder': 1,
-             },
-    'lyr5': {'dataset': r'Z:\users\lelise\geospatial\hydrography\nhd\NHD_H_North_Carolina_State_Shape\Shape\WBDHU6.shp',
-             'color': 'none',
-             'edgecolor': 'black',
-             'linewidth': 1,
-             'alpha': 1,
-             'zorder': 1,
-             },
-}
-
-# Download and prep shapefile layers for plots
-for layer in layers_dict.keys():
-    l_gdf = cat.get_geodataframe(layers_dict[layer]['dataset'])
-    l_gdf.to_crs(mod.crs, inplace=True)
-    layers_dict[layer]['gdf'] = l_gdf.clip(mod.region)
-
-# More plot prep
-wkt = dem.raster.crs.to_wkt()
-utm_zone = dem.raster.crs.to_wkt().split("UTM zone ")[1][:3]
-utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
-extent = np.array(layers_dict['lyr5']['gdf'].buffer(10000).total_bounds)[[0, 2, 1, 3]]
-plt_gdf = [flooded_hits, flooded_miss, nonflooded_hits, nonflooded_misses]
-plt_label = ['Hits', 'Misses', 'Correct Non-Forecasts', 'False Alarms']
-
-# Now PLOT!
-fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(8, 5.5), subplot_kw={'projection': utm}, tight_layout=True)
-axs = axs.flatten()
-for i in range(len(plt_label)):
-    # Plot background/geography layers
-    for layer in layers_dict.keys():
-        l_gdf = layers_dict[layer]['gdf']
-        l_gdf.plot(ax=axs[i],
-                   color=layers_dict[layer]['color'],
-                   edgecolor=layers_dict[layer]['edgecolor'],
-                   linewidth=layers_dict[layer]['linewidth'],
-                   zorder=layers_dict[layer]['zorder'],
-                   alpha=layers_dict[layer]['alpha'])
-
-    # Plot the stat at each gage
-    plt_gdf[i].centroid.plot(
-        color='black',
-        ax=axs[i],
-        markersize=8,
-        marker='.',
-        alpha=0.8,
-        zorder=2)
-
-    # Add title and save figure
-    axs[i].set_extent(extent, crs=utm)
-    axs[i].set_title(plt_label[i], loc='left')
-
-    if i == 0:
-        axs[i].set_ylabel(f"y coordinate UTM zone {utm_zone} [m]")
-        axs[i].yaxis.set_visible(True)
-        axs[i].xaxis.set_visible(False)
-    elif i == 1:
-        axs[i].yaxis.set_visible(False)
-        axs[i].xaxis.set_visible(False)
-    elif i == 2:
-        axs[i].set_ylabel(f"y coordinate UTM zone {utm_zone} [m]")
-        axs[i].yaxis.set_visible(True)
-        axs[i].set_xlabel(f"x coordinate UTM zone {utm_zone} [m]")
-        axs[i].xaxis.set_visible(True)
-    elif i == 3:
-        axs[i].yaxis.set_visible(False)
-        axs[i].set_xlabel(f"x coordinate UTM zone {utm_zone} [m]")
-        axs[i].xaxis.set_visible(True)
-
-    axs[i].ticklabel_format(style='plain', useOffset=False)
-    axs[i].set_aspect('equal')
-
-plt.subplots_adjust(wspace=0, hspace=0)
-plt.margins(x=0, y=0)
-plt.savefig(os.path.join(out_dir, 'contingency_matrix_' + str(hmin) + 'm.png'), bbox_inches='tight',
-            dpi=225)
-plt.close()
+    x, y = buildings['flood_hitmiss'].value_counts()
+    w, z = buildings['nonflood_hitmiss'].value_counts()
+    scores = forecast_scores(x, y, z, w)
+    scores.to_csv(os.path.join(out_dir, f'forecasting_scores_depth_{hmin}.csv'))
+    # ''' PART 5 - Plotting '''
+    # font = {'family': 'Times New Roman',
+    #         'size': 10}
+    # mpl.rc('font', **font)
+    #
+    # # Plotting the data on a map with contextual layers
+    # layers_dict = {
+    #     'lyr1': {'dataset': 'enc_domain_HUC6_clipped',
+    #              'color': 'grey',
+    #              'edgecolor': 'none',
+    #              'linewidth': 0,
+    #              'alpha': 0.25,
+    #              'zorder': 0,
+    #              },
+    #     'lyr2': {'dataset': 'carolinas_coastal_wb',
+    #              'color': 'steelblue',
+    #              'edgecolor': 'none',
+    #              'linewidth': 0,
+    #              'alpha': 1,
+    #              'zorder': 1,
+    #              },
+    #     'lyr3': {'dataset': 'carolinas_major_rivers',
+    #              'color': 'steelblue',
+    #              'edgecolor': 'steelblue',
+    #              'linewidth': 0.5,
+    #              'alpha': 1,
+    #              'zorder': 1,
+    #              },
+    #     'lyr4': {'dataset': r'Z:\users\lelise\geospatial\fris\bathy_v5\NHDArea_LowerPeeDee.shp',
+    #              'color': 'steelblue',
+    #              'edgecolor': 'steelblue',
+    #              'linewidth': 0.5,
+    #              'alpha': 1,
+    #              'zorder': 1,
+    #              },
+    #     'lyr5': {'dataset': r'Z:\users\lelise\geospatial\hydrography\nhd\NHD_H_North_Carolina_State_Shape\Shape\WBDHU6.shp',
+    #              'color': 'none',
+    #              'edgecolor': 'black',
+    #              'linewidth': 1,
+    #              'alpha': 1,
+    #              'zorder': 1,
+    #              },
+    # }
+    #
+    # # Download and prep shapefile layers for plots
+    # for layer in layers_dict.keys():
+    #     l_gdf = cat.get_geodataframe(layers_dict[layer]['dataset'])
+    #     l_gdf.to_crs(mod.crs, inplace=True)
+    #     layers_dict[layer]['gdf'] = l_gdf.clip(mod.region)
+    #
+    # # More plot prep
+    # wkt = dem.raster.crs.to_wkt()
+    # utm_zone = dem.raster.crs.to_wkt().split("UTM zone ")[1][:3]
+    # utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
+    # extent = np.array(layers_dict['lyr5']['gdf'].buffer(10000).total_bounds)[[0, 2, 1, 3]]
+    # plt_gdf = [flooded_hits, flooded_miss, nonflooded_hits, nonflooded_misses]
+    # plt_label = ['Hits', 'Misses', 'Correct Non-Forecasts', 'False Alarms']
+    #
+    # # Now PLOT!
+    # fig, axs = plt.subplots(nrows=2, ncols=2, figsize=(8, 5.5), subplot_kw={'projection': utm}, tight_layout=True)
+    # axs = axs.flatten()
+    # for i in range(len(plt_label)):
+    #     # Plot background/geography layers
+    #     for layer in layers_dict.keys():
+    #         l_gdf = layers_dict[layer]['gdf']
+    #         l_gdf.plot(ax=axs[i],
+    #                    color=layers_dict[layer]['color'],
+    #                    edgecolor=layers_dict[layer]['edgecolor'],
+    #                    linewidth=layers_dict[layer]['linewidth'],
+    #                    zorder=layers_dict[layer]['zorder'],
+    #                    alpha=layers_dict[layer]['alpha'])
+    #
+    #     # Plot the stat at each gage
+    #     plt_gdf[i].centroid.plot(
+    #         color='black',
+    #         ax=axs[i],
+    #         markersize=8,
+    #         marker='.',
+    #         alpha=0.8,
+    #         zorder=2)
+    #
+    #     # Add title and save figure
+    #     axs[i].set_extent(extent, crs=utm)
+    #     axs[i].set_title(plt_label[i], loc='left')
+    #
+    #     if i == 0:
+    #         axs[i].set_ylabel(f"y coordinate UTM zone {utm_zone} [m]")
+    #         axs[i].yaxis.set_visible(True)
+    #         axs[i].xaxis.set_visible(False)
+    #     elif i == 1:
+    #         axs[i].yaxis.set_visible(False)
+    #         axs[i].xaxis.set_visible(False)
+    #     elif i == 2:
+    #         axs[i].set_ylabel(f"y coordinate UTM zone {utm_zone} [m]")
+    #         axs[i].yaxis.set_visible(True)
+    #         axs[i].set_xlabel(f"x coordinate UTM zone {utm_zone} [m]")
+    #         axs[i].xaxis.set_visible(True)
+    #     elif i == 3:
+    #         axs[i].yaxis.set_visible(False)
+    #         axs[i].set_xlabel(f"x coordinate UTM zone {utm_zone} [m]")
+    #         axs[i].xaxis.set_visible(True)
+    #
+    #     axs[i].ticklabel_format(style='plain', useOffset=False)
+    #     axs[i].set_aspect('equal')
+    #
+    # plt.subplots_adjust(wspace=0, hspace=0)
+    # plt.margins(x=0, y=0)
+    # plt.savefig(os.path.join(out_dir, 'contingency_matrix_' + str(hmin) + 'm.png'), bbox_inches='tight',
+    #             dpi=225)
+    # plt.close()

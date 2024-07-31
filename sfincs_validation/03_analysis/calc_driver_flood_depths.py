@@ -21,172 +21,83 @@ from matplotlib.ticker import FormatStrFormatter
 # TO EXTRACT DEPTH STATISTICS. THIS CAN BE COMPARED TO TAKING THE MEAN ACROSS THE ENSEMBLE AT EACH CELL TO GET A
 # MEAN DEPTH SURFACE... THEN FITTING THE DISTRIBUTION TO THE DEPTHS.
 
-os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_obs\analysis')
+os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model\process_attribution\20m')
+buildings = pd.read_csv(r'building_pts_with_depth_floodedOnly.csv', index_col=0)
+gdf = buildings.copy()
+gdf = gdf[gdf['hmax'] > 0.15]
+gdf['summed'] = gdf['hmax_coastal'].fillna(0) + gdf['hmax_runoff'].fillna(0)
 
-depfile = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_wrf\subgrid\dep.tif'
+gdf_clean = gdf[(gdf['hmax_class'] == 2) | (gdf['hmax_class'] == 4)]
+gdf_clean = gdf_clean[['hmax', 'hmax_coastal', 'hmax_runoff', 'summed', 'Name']]
+gdf_clean.columns = ['Compound', 'Coastal', 'Runoff', 'Summed', 'Name']
+gdf_clean.set_index('Name', inplace=True, drop=True)
 
-root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter2\sfincs_models_wrf\AGU2023\future_florence' \
-       r'\future_florence_ensmean'
-mod = SfincsModel(root=root, mode='r')
+# PLOTTING
+font = {'family': 'Arial', 'size': 10}
+mpl.rc('font', **font)
+mpl.rcParams.update({'axes.titlesize': 10})
+mpl.rcParams["figure.autolayout"] = True
+nrow = 6
+ncol = 4
+n_subplots = nrow * ncol
+first_in_row = np.arange(0, n_subplots, ncol)
+last_in_row = np.arange(ncol - 1, n_subplots, ncol)
+first_row = np.arange(0, ncol)
+last_row = np.arange(first_in_row[-1], n_subplots, 1)
+nbins = 10
+basins = ['Lower Pee Dee', 'Cape Fear', 'Onslow Bay', 'Neuse', 'Pamlico', 'Domain']
+process = ['Runoff', 'Coastal', 'Summed', 'Compound']
 
-da_zsmax = xr.open_dataarray(os.path.join(os.getcwd(), 'zsmax', f'pgw_zsmax.nc'))
-da_zsmax_classified = xr.open_dataarray(os.path.join(os.getcwd(), 'driver_analysis', f'pgw_drivers_classified_all.nc'))
+fig, axs = plt.subplots(figsize=(6.2, 8), ncols=ncol, nrows=nrow,
+                        tight_layout=True, layout='constrained',
+                        sharey=True, sharex=True)
+for i in range(nrow):
+    k = first_in_row[i]
+    if i == 5:
+        dsp = gdf_clean
+    else:
+        dsp = gdf_clean[gdf_clean.index == basins[i]]
 
-# Loop through the zsmax and calculate the depths for the water levels for each attributing process
-runs = list(da_zsmax.run.values)
-runs = list(filter(lambda x: 'flor_pres' in x, runs))
-da_class = da_zsmax_classified.sel(run='flor_pres')
+    for ii in range(ncol):
+        dsp1 = dsp[process[ii]]
+        dsp1.dropna(axis=0, how='any', inplace=True)
 
-# Consider only areas where compound flooding occurred
-mask = ((da_class == 2) | (da_class == 4))
+        ax = axs[i][ii]
+        data, bins, _ = ax.hist(dsp1, bins=nbins,
+                                range=[0, 3],
+                                density=True,
+                                histtype='stepfilled',
+                                color='grey',
+                                alpha=0.8,
+                                )
+        ax.set_ylim(0, 2)
+        ax.axvline(x=dsp1.mean(), color='black', linestyle='--')
+        ax.axvline(x=dsp1.median(), color='black')
+        start, end = ax.get_ylim()
+        startx, endx = ax.get_xlim()
+        ax.text(x=endx - 0.05, y=end - 0.30, s=f'Mean:{np.round(dsp1.mean(), 2)}', ha='right', va='bottom', fontsize=10)
+        ax.text(x=endx - 0.05, y=end - 0.55, s=f'Median:{np.round(dsp1.median(), 2)}', ha='right', va='bottom',
+                fontsize=10)
+        ax.text(x=endx - 0.05, y=end - 0.80, s=f'n={len(dsp1)}', ha='right', va='bottom', fontsize=10)
 
-# Get water depths in these areas only
-hmax_das = []
-for run in runs:
-    print(run)
-    zsmax = da_zsmax.sel(run=run)
-    hmax = utils.downscale_floodmap(
-        zsmax=zsmax.where(mask),
-        dep=mod.data_catalog.get_rasterdataset(depfile),
-        hmin=0.05,
-        gdf_mask=None,
-        reproj_method='bilinear'
-    )
-    hmax_das.append(hmax)
+axs = axs.flatten()
+counter = 0
+for i in first_row:
+    axs[i].set_title(f'{process[counter]}', loc='center')
+    counter += 1
+for i in range(len(first_in_row)):
+    axs[first_in_row[i]].text(-0.15, 0.5, basins[i],
+                              horizontalalignment='right',
+                              verticalalignment='center',
+                              rotation='vertical',
+                              transform=axs[first_in_row[i]].transAxes)
+for i in last_row:
+    axs[i].set_xlabel('Depths (m)')
+plt.margins(x=0, y=0)
+plt.savefig('histogram_of_depths_at_buildings_within_compoundExtent.png',
+            bbox_inches='tight', dpi=255)
+plt.close()
 
-# Add the depths for coastal and runoff 
-summed_processes = (hmax_das[0] + hmax_das[2]).compute()
-hmax_das.append(summed_processes)
-hmax_das = xr.concat(hmax_das, dim='run')
-runs.append('summed_processes')
-hmax_das['run'] = xr.IndexVariable('run', runs)
-
-hmax_df = pd.DataFrame()
-for run in hmax_das.run.values.tolist():
-    # Get depths and combine into single pandas dataframe
-    hmax = hmax_das.sel(run=run)
-    df = hmax.to_dataframe().dropna(how='any', axis=0)
-    df = pd.DataFrame(df['hmax'])
-    df.reset_index(inplace=True)
-    df.drop(columns=df.columns.difference(['hmax']), inplace=True)
-    hmax_df = pd.concat([hmax_df, df], ignore_index=True, axis=1)
-hmax_df.columns = hmax_das.run.values.tolist()
-mean_depth = hmax_df.mean()
-
-# Create plot
-plot_depth_hist = False
-if plot_depth_hist is True:
-    nbins = 50
-    font = {'family': 'Arial', 'size': 10}
-    mpl.rc('font', **font)
-    mpl.rcParams.update({'axes.titlesize': 10})
-    mpl.rcParams["figure.autolayout"] = True
-    fig, axes = plt.subplots(nrows=len(hmax_df.columns),
-                             figsize=(4, 5),
-                             ncols=1,
-                             tight_layout=True, layout='constrained',
-                             sharex=True,
-                             sharey=True
-                             )
-    for i in range(len(hmax_df.columns)):
-        col = hmax_df.columns[i]
-        data, bins, _ = axes[i].hist(hmax_df[col],
-                                     bins=nbins,
-                                     range=[0, 15],
-                                     density=True,
-                                     histtype='stepfilled',
-                                     alpha=0.8
-                                     )
-        axes[i].axvline(x=mean_depth[col], color='red')
-        axes[i].set_title(col)
-
-    plt.xlabel('Flood Depths (m)')
-    plt.suptitle('Depths in Compound Areas')
-    plt.subplots_adjust(wspace=0.02, hspace=0.4, top=0.90)
-    plt.margins(x=0, y=0)
-    plt.savefig(os.path.join(rf'Z:\users\lelise\projects\ENC_CompFld\Chapter1\flor_depths_in_compoundAreas.png'),
-                bbox_inches='tight', dpi=255)
-    plt.close()
-
-''' PART 1 - Determine damage status using NFIP claims/policy data at each structure'''
-# Read in area of interest shapefile and project
-studyarea_gdf = mod.region.to_crs(epsg=32617)
-
-# Read in structures information and clip to the study area
-nc_buildings = gpd.read_file(r'Z:\users\lelise\geospatial\flood_damage\included_data.gdb',
-                             layer='buildings',
-                             mask=studyarea_gdf).to_crs(studyarea_gdf.crs)
-nc_buildings['STATE'] = 'NC'
-b1 = nc_buildings.drop(nc_buildings.columns[~nc_buildings.columns.isin(['STATE', 'geometry'])], axis=1)
-print('Number of NC Buildings in Study Area:', str(len(nc_buildings)))
-
-# Load SC buildings from NSI
-sc_buildings = gpd.read_file(r'Z:\users\lelise\geospatial\infrastructure\nsi_2022_45.gpkg',
-                             mask=studyarea_gdf).to_crs(studyarea_gdf.crs)
-sc_buildings['STATE'] = 'SC'
-b2 = sc_buildings.drop(sc_buildings.columns[~sc_buildings.columns.isin(['STATE', 'geometry'])], axis=1)
-print('Number of SC Buildings in Study Area:', str(len(sc_buildings)))
-
-buildings = pd.concat(objs=[b1, b2],
-                      axis=0,
-                      ignore_index=True)
-
-# Extract depth at buildings
-gdf = buildings
-hmin = 0.05
-hmax_df = pd.DataFrame()
-for run in hmax_das.run.values.tolist():
-    # Get depths and combine into single pandas dataframe
-    hmax = hmax_das.sel(run=run)
-    hmax_at_buildings = hmax.sel(x=gdf['geometry'].x.to_xarray(),
-                                 y=gdf['geometry'].y.to_xarray(),
-                                 method='nearest').values
-    gdf[run] = hmax_at_buildings.transpose()
-
-gdf_clean = gdf.copy()
-gdf_clean.drop(['STATE'], inplace=True, axis=1)
-gdf_clean = gdf_clean.dropna(axis=0, how='all', subset=hmax_das.run.values.tolist())
-gdf_clean.set_index('geometry', drop=True, inplace=True)
-gdf_clean['summed_processes'] = gdf_clean['flor_pres_coastal'].fillna(0) + gdf_clean['flor_pres_runoff'].fillna(0)
-
-mean_depth = gdf_clean.mean()
-median_depth = gdf_clean.median()
-std_depth = gdf_clean.std()
-
-# Create plot
-plot_depth_hist = True
-if plot_depth_hist is True:
-    nbins = 50
-    font = {'family': 'Arial', 'size': 10}
-    mpl.rc('font', **font)
-    mpl.rcParams.update({'axes.titlesize': 10})
-    mpl.rcParams["figure.autolayout"] = True
-    fig, axes = plt.subplots(nrows=len(gdf_clean.columns),
-                             figsize=(4, 5),
-                             ncols=1,
-                             tight_layout=True, layout='constrained',
-                             sharex=True,
-                             sharey=True
-                             )
-    for i in range(len(gdf_clean.columns)):
-        col = gdf_clean.columns[i]
-        d = gdf_clean[col]
-        d.dropna(axis=0, how='any', inplace=True)
-        data, bins, _ = axes[i].hist(d,
-                                     bins=nbins,
-                                     range=[0, 7],
-                                     density=True,
-                                     histtype='stepfilled',
-                                     alpha=0.8
-                                     )
-        axes[i].axvline(x=mean_depth[col], color='red')
-        axes[i].axvline(x=median_depth[col], color='purple')
-        axes[i].set_title(f'{col} (n={len(d)})')
-
-    plt.xlabel('Flood Depths (m)')
-    plt.suptitle('Building Depths in Compound Areas')
-    plt.subplots_adjust(wspace=0.02, hspace=0.4, top=0.90)
-    plt.margins(x=0, y=0)
-    plt.savefig(os.path.join(rf'Z:\users\lelise\projects\ENC_CompFld\Chapter1\flor_depths_in_compoundAreas_atBuildings.png'),
-                bbox_inches='tight', dpi=255)
-    plt.close()
+summed = np.array([0.74,0.94,0.66,0.85,0.64,0.75])
+com = np.array([0.78,0.89,0.73,0.88,0.7,0.8])
+dif = np.subtract(com, summed)

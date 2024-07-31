@@ -20,7 +20,7 @@ yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml'
 # Setup working directory and model root, create and instance of a SFINCS model to write to
 #os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
 os.chdir('/projects/sfincs/')
-root = 'ENC_200m_sbg5m_noFris_avgN'
+root = 'ENC_200m_sbg5m_maxN'
 mod = SfincsModel(root=root, mode='w+', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
 cat = mod.data_catalog
 
@@ -69,11 +69,11 @@ datasets_dep = [
     {"elevtn": "sc_LPD_bathy_2mburn", 'reproj_method': 'bilinear'},
 
     # FRIS stream centerlines rasterized to 5m channel. FRIS point data interpolated onto this raster.
-    # {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
 
     # USGS CoNED data
     {"elevtn": "sc_2m_DEM_USGS_CoNED_tiles", 'reproj_method': 'bilinear'},
@@ -130,15 +130,15 @@ lulc = mod.data_catalog.get_rasterdataset('nlcd_2016', geom=mod.region)
 
 # rasterize the manning value of gdf to the model grid - rivers and coastal water bodies
 nhd_area = mod.data_catalog.get_geodataframe("carolinas_nhd_area_rivers", geom=mod.region).to_crs(mod.crs)
-nhd_area["manning"] = 0.035
+nhd_area["manning"] = 0.045
 nhd_area_manning = lulc.raster.rasterize(nhd_area, "manning", nodata=np.nan, all_touched=False)
 
 rivers = mod.data_catalog.get_geodataframe("fris_stream_cntrline", geom=mod.region).to_crs(mod.crs)
-rivers["manning"] = 0.045
+rivers["manning"] = 0.055
 rivers_manning = lulc.raster.rasterize(rivers, "manning", nodata=np.nan, all_touched=False)
 
 coastal_wb = mod.data_catalog.get_geodataframe("carolinas_coastal_wb", geom=mod.region).to_crs(mod.crs)
-coastal_wb["manning"] = 0.022
+coastal_wb["manning"] = 0.025
 coastal_wb_manning = lulc.raster.rasterize(coastal_wb, "manning", nodata=np.nan, all_touched=False)
 
 datasets_rgh = [
@@ -146,7 +146,7 @@ datasets_rgh = [
     {"manning": nhd_area_manning},
     {"manning": rivers_manning},
     {"lulc": "nlcd_2016",
-     'reclass_table': os.path.join(cat_dir, 'lulc/nlcd/nlcd_mapping_mean.csv')}]
+     'reclass_table': os.path.join(cat_dir, 'lulc/nlcd/nlcd_mapping_max.csv')}]
 
 mod.setup_manning_roughness(datasets_rgh=datasets_rgh)
 _ = mod.plot_basemap(fn_out='mannings.png', variable="manning", plot_bounds=False, bmap="sat", zoomlevel=12)
@@ -154,11 +154,11 @@ plt.close()
 print('Done with setting up mannings roughness')
 
 # Setup Curve Number Infiltration without recovery - A
-# mod.setup_cn_infiltration(cn='gcn250',
-#                           antecedent_moisture='avg')
-# _ = mod.plot_basemap(fn_out='scs_curvenumber.png', variable="scs", plot_bounds=False, bmap="sat", zoomlevel=12)
-# plt.close()
-# mod.write()
+mod.setup_cn_infiltration(cn='gcn250',
+                          antecedent_moisture='avg')
+_ = mod.plot_basemap(fn_out='scs_curvenumber.png', variable="scs", plot_bounds=False, bmap="sat", zoomlevel=12)
+plt.close()
+mod.write()
 
 # Setup Curve Number Infiltration with recovery - B
 """Setup model the Soil Conservation Service (SCS) Curve Number (CN) files for SFINCS
@@ -184,7 +184,7 @@ mod.setup_cn_infiltration_with_ks(lulc='nlcd_2016',
                                   hsg='gNATSGO_hsg_conus',
                                   ksat='gNATSGO_ksat_DCP_0to20cm_carolinas',
                                   reclass_table=r'/projects/sfincs/data/soil/surrgo/CN_Table_HSG_NLCD.csv',
-                                  effective=0.75,
+                                  effective=1.0,
                                   block_size=2000)
 mod.write()
 

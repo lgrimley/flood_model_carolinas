@@ -20,7 +20,7 @@ yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml'
 # Setup working directory and model root, create and instance of a SFINCS model to write to
 #os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
 os.chdir('/projects/sfincs/')
-root = 'ENC_200m_sbg5m_noFris_avgN'
+root = 'ENC_200m_sbg5m_avgN_LPD1m'
 mod = SfincsModel(root=root, mode='w+', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
 cat = mod.data_catalog
 
@@ -66,14 +66,14 @@ datasets_dep = [
     {"elevtn": "nc_ChanNHDArea_RASbedInterp", 'reproj_method': 'bilinear'},
 
     # NHD Area rasterized and a constant depth burned into the channel base on underlying DEM
-    {"elevtn": "sc_LPD_bathy_2mburn", 'reproj_method': 'bilinear'},
+    {"elevtn": "sc_LPD_bathy_1mburn_tiles", 'reproj_method': 'bilinear'},
 
     # FRIS stream centerlines rasterized to 5m channel. FRIS point data interpolated onto this raster.
-    # {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
 
     # USGS CoNED data
     {"elevtn": "sc_2m_DEM_USGS_CoNED_tiles", 'reproj_method': 'bilinear'},
@@ -184,7 +184,7 @@ mod.setup_cn_infiltration_with_ks(lulc='nlcd_2016',
                                   hsg='gNATSGO_hsg_conus',
                                   ksat='gNATSGO_ksat_DCP_0to20cm_carolinas',
                                   reclass_table=r'/projects/sfincs/data/soil/surrgo/CN_Table_HSG_NLCD.csv',
-                                  effective=0.75,
+                                  effective=0.25,
                                   block_size=2000)
 mod.write()
 

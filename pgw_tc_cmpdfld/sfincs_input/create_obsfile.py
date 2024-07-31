@@ -22,6 +22,13 @@ df_usgs['owner'] = 'USGS'
 df_usgs['index'] = df_usgs['owner'] + '_' + ds['index'].values.astype(str)
 df_usgs.drop(columns='owner', inplace=True)
 
+obs = cat.get_geodataset('usgs_waterlevel_florence',
+                         geom=mod.region,
+                         variables=["waterlevel"],
+                         time_tuple=mod.get_model_time()
+                         )
+
+
 # NCEM contrail locations
 ds = cat.get_dataframe(data_like=r'Z:\users\lelise\data\gages\ncem\contrails_and_noaa_stationdata_meta_ALL_2022-09'
                                  r'-20_Ian.csv', header=0)

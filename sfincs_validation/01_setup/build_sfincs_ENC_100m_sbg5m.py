@@ -20,7 +20,7 @@ yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml'
 # Setup working directory and model root, create and instance of a SFINCS model to write to
 #os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
 os.chdir('/projects/sfincs/')
-root = 'ENC_200m_sbg5m_noFris_avgN'
+root = 'ENC_100m_sbg5m_avgN'
 mod = SfincsModel(root=root, mode='w+', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
 cat = mod.data_catalog
 
@@ -34,7 +34,7 @@ mod.setup_region(region={'geom': cat[mask_dataset].path})
 print('Setup model region')
 
 # Setup grid
-grid_res = 200
+grid_res = 100
 sbg_res = 5
 mod.setup_grid_from_region(
     region={'geom': cat[mask_dataset].path},
@@ -69,11 +69,11 @@ datasets_dep = [
     {"elevtn": "sc_LPD_bathy_2mburn", 'reproj_method': 'bilinear'},
 
     # FRIS stream centerlines rasterized to 5m channel. FRIS point data interpolated onto this raster.
-    # {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
-    # {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_CapeFear", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_LPD", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Neuse", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_Pamlico", 'reproj_method': 'bilinear'},
+    {"elevtn": "nc_Chan5mWdth_RASbed_OnslowBay", 'reproj_method': 'bilinear'},
 
     # USGS CoNED data
     {"elevtn": "sc_2m_DEM_USGS_CoNED_tiles", 'reproj_method': 'bilinear'},
@@ -280,41 +280,6 @@ _ = mod.plot_forcing(fn_out="forcing.png")
 plt.close()
 print('Plot forcing')
 
-# Setup observation points
-# obs_datasets = ['usgs_waterlevel_florence',
-#                 'noaa_waterlevel_florence',
-#                 'usgs_rapid_deployment_waterlevel_florence',
-#                 'ncem_waterlevel_florence'
-#                 ]
-# for i in range(len(obs_datasets)):
-#     data = cat.get_geodataset(data_like=obs_datasets[i],
-#                               geom=domain,
-#                               buffer=0,
-#                               variables=["waterlevel"],
-#                               time_tuple=mod.get_model_time()
-#                               )
-#     if 'geometry' in list(data.coords):
-#         df = gpd.GeoDataFrame(data.index.values,
-#                               geometry=data.geometry.values,
-#                               crs=4326)
-#     else:
-#         df = gpd.GeoDataFrame(data.index.values,
-#                               geometry=gpd.points_from_xy(x=data.x.values,
-#                                                           y=data.y.values),
-#                               crs=4326)
-#     df.columns = ['site_no', 'geometry']
-#     if i == 0:
-#         mod.setup_observation_points(locations=df, merge=False)
-#     else:
-#         mod.setup_observation_points(locations=df, merge=True)
-#
-# data = mod.geoms['obs']
-# data.to_file(os.path.join(mod.root, 'gis', 'obs.shp'))
-# mod.write_geoms(data_vars='obs')
-# print('Done setting up point observations')
-
-
-# Write and plot model
 _ = mod.plot_basemap(fn_out="basemap.png", bmap="sat")
 plt.close()
 mod.write()
@@ -326,8 +291,8 @@ mod.setup_subgrid(
     datasets_rgh=datasets_rgh,
     nr_subgrid_pixels=int(grid_res / sbg_res),
     nbins=15,
-    write_dep_tif=True,
-    write_man_tif=True,
+    write_dep_tif=False,
+    write_man_tif=False,
 )
 
 mod.write_subgrid()

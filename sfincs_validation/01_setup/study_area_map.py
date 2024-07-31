@@ -17,12 +17,16 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 import matplotlib.gridspec as gridspec
 
-yml = r'Z:\users\lelise\data\data_catalog.yml'
-cat = hydromt.DataCatalog(yml)
-os.chdir(
-    r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\2018_Florence\mod_v6_paper')
-mod = SfincsModel(root='flo_hindcast_v6_200m_LPD2m_avgN', mode='r', data_libs=yml)
-mod.read()
+# Load in model and read results
+cat_dir = r'Z:\users\lelise\data'
+yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
+yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
+yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
+
+os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
+model_root = 'ENC_200m_sbg5m_noChannels_avgN'
+mod = SfincsModel(root=model_root, mode='r', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
+cat = mod.data_catalog
 
 storm = 'FLORENCE'
 
@@ -92,27 +96,27 @@ norm = mpl.colors.BoundaryNorm(bounds, cmap.N, extend='both')
 wkt = mod.grid['dep'].raster.crs.to_wkt()
 utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
 utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
-# extent = np.array(basins.buffer(1000).total_bounds)[[0, 2, 1, 3]]
+extent = np.array(basins.buffer(1000).total_bounds)[[0, 2, 1, 3]]
 
 ''' Study Area Figure '''
 plt_study_area_map = True
 if plt_study_area_map is True:
     fig, ax = plt.subplots(
         nrows=1, ncols=1,
-        figsize=(6.5, 4.5),
+        figsize=(6.2, 4.5),
         subplot_kw={'projection': utm},
         tight_layout=True)
     dem = mod.grid['dep'].plot(ax=ax, cmap=cmap, norm=norm, add_colorbar=False, zorder=1)
 
     # Plot background/geography layers
-    states.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5,
+    states.plot(ax=ax, label='States', color='none', edgecolor='maroon', linewidth=0.65,
                 linestyle='-', zorder=2, alpha=0.8)
-    major_rivers.plot(ax=ax, color='steelblue', edgecolor='none',
+    major_rivers.plot(ax=ax, label='Rivers', color='steelblue', edgecolor='none',
                       linewidth=0.5, linestyle='-', zorder=3, alpha=1)
-    lpd_riv.plot(ax=ax, color='steelblue', edgecolor='steelblue',
+    lpd_riv.plot(ax=ax, label='Rivers', color='steelblue', edgecolor='steelblue',
                  linewidth=0.5, linestyle='-', zorder=3, alpha=1)
-    basins.plot(ax=ax, color='none', edgecolor='black', linewidth=1, linestyle='-',
-                zorder=3, alpha=1, label='HUC6 Basins')
+    basins.plot(ax=ax, color='none', label='HUC6 Basins', edgecolor='black', linewidth=1, linestyle='-',
+                zorder=3, alpha=1)
     roads.plot(ax=ax, color='white', edgecolor='none', linewidth=1.5,
                linestyle='-', zorder=3, alpha=1)
     roads.plot(ax=ax, color='black', edgecolor='none', linewidth=0.75,
@@ -181,11 +185,11 @@ if plt_study_area_map is True:
     # Add DEM colorbar
     cbar = fig.colorbar(dem,
                         ax=ax,
-                        shrink=0.5,
+                        shrink=0.3,
                         extend='both',
                         spacing='uniform',
                         label='Elevation\n(m+NAVD88)',
-                        anchor=(0.10, 0.1))
+                        anchor=(0.10, 0.2))
     # Add layer legend
     legend_kwargs0 = dict(
         bbox_to_anchor=(1, 1),
