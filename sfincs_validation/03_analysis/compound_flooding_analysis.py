@@ -7,6 +7,17 @@ import hydromt
 from hydromt import DataCatalog
 from hydromt_sfincs import SfincsModel, utils
 
+"""
+SCRIPT:
+DESCRIPTION:
+This script processes SFINCS model output to attribute peak water levels to the different flood processes or drivers.
+Pieces of this code can be reused for a similar analysis.
+
+AUTHOR: Lauren Grimley
+CONTACT: lauren.grimley@unc.edu
+
+"""
+
 
 def classify_zsmax_by_driver(da, compound_key, runoff_key, coastal_key, name_out, hmin):
     # Calculate the max water level at each cell across the coastal and runoff drivers
@@ -55,28 +66,28 @@ cat_dir = r'Z:\users\lelise\data'
 yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
 yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
-model_root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model\ENC_200m_sbg5m_avgN_adv1_eff75'
+os.chdir(r'Z:\users\lelise\projects\Carolinas_SFINCS\Chapter1_FlorenceValidation\sfincs_models\mod_v4_flor')
+model_root = r'ENC_200m_sbg5m_avgN_adv1_eff75'
 mod = SfincsModel(model_root, mode='r',
                   data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
 
-f = mod.data_catalog.get_rasterdataset(r'Z:\users\lelise\data\lulc\nlcd\NLCD_2016_Land_Cover'
-                                       r'\NLCD_2016_Land_Cover_L48_20190424.img', geom=mod.region)
-f.raster.to_raster(r'Z:\users\lelise\data\lulc\nlcd\NLCD_2016_Land_Cover'
-                                       r'\domain.tif', nodata=255)
-
-# Create working directory
-out_dir = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model', 'process_attribution',
-                       '20m')
-if not os.path.exists(out_dir):
-    os.makedirs(out_dir)
-os.chdir(out_dir)
-
 # Load peak flood maps
-da = xr.open_dataarray(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model\floodmaps\20m\floodmaps.nc')
+# The netcdf of peak water levels was created using the downscale_floodmaps.py script
+res = 200
+da = xr.open_dataarray(os.path.join(os.getcwd(), 'floodmaps', f'{res}m', 'floodmaps.nc'))
+print(da.keys())
+
+# Load in HUC6 watershed boundary
 huc_boundary = gpd.read_file(r'Z:\users\lelise\geospatial\hydrography\nhd\NHD_H_North_Carolina_State_Shape\Shape'
                              r'\WBDHU6.shp')
 huc_boundary.to_crs(32617, inplace=True)
 huc_boundary = huc_boundary[["HUC6", "Name", "geometry"]]
+
+# Create working directory
+out_dir = os.path.join(os.getcwd(), 'process_attribution', f'{res}m')
+if not os.path.exists(out_dir):
+    os.makedirs(out_dir)
+os.chdir(out_dir)
 
 ''' Part 1 - Attribute total flood extent to runoff, coastal, and compound processes '''
 outfile_ext = 'all'
@@ -131,10 +142,10 @@ if part2 is True:
     da_c, fld_cells_by_driver, da_compound, da_diff = out
 
     # Write to files
-    # da_c.to_netcdf(f'flor_peakWL_attributed_{outfile_ext}.nc')
-    # da_compound.to_netcdf(f'flor_peakWL_compound_extent_{outfile_ext}.nc')
-    # da_diff.to_netcdf(f'flor_peakWL_compound_minus_maxIndiv_{outfile_ext}.nc')
-    # da_diff.raster.to_raster(f'flor_peakWL_compound_minus_maxIndiv_{outfile_ext}.tif', nodata=np.nan)
+    da_c.to_netcdf(f'flor_peakWL_attributed_{outfile_ext}.nc')
+    da_compound.to_netcdf(f'flor_peakWL_compound_extent_{outfile_ext}.nc')
+    da_diff.to_netcdf(f'flor_peakWL_compound_minus_maxIndiv_{outfile_ext}.nc')
+    da_diff.raster.to_raster(f'flor_peakWL_compound_minus_maxIndiv_{outfile_ext}.tif', nodata=np.nan)
 
     # Calculate flood area
     fld_area = fld_cells_by_driver.copy()
@@ -146,17 +157,17 @@ if part2 is True:
 
     var = 'diff in waterlevel compound minus max. single driver'
     depth_stats = get_depth_stats(da_depth=da_diff, var=var, thresholds=[-9999.0, 0.0, 0.05])
-    # depth_stats.to_csv(f'flor_peakWL_compound_minus_maxIndiv_stats_{outfile_ext}.csv')
+    depth_stats.to_csv(f'flor_peakWL_compound_minus_maxIndiv_stats_{outfile_ext}.csv')
 
-''' HUC basin '''
-res = da_c.raster.res[0]  # meters
+''' Get flood area/depth information by HUC6 basin '''
+res = 20  # meters
 mdf = pd.DataFrame()
 for basin in ['Pamlico', 'Neuse', 'Cape Fear', 'Onslow Bay', 'Lower Pee Dee']:
     sub = huc_boundary[huc_boundary['Name'] == basin]
     sub["basin"] = 1
     b = da.raster.rasterize(sub, "basin", nodata=-9999.0, all_touched=False)
     da2_c = da_c.where(b == 1)
-    # da2_diff = da_diff.where(b==1)
+    da2_diff = da_diff.where(b == 1)
 
     unique_codes, fld_cells_by_driver = np.unique(da2_c.data, return_counts=True)
     fld_area = fld_cells_by_driver.copy()
@@ -171,45 +182,44 @@ mdf.to_csv(f'flor_peakWL_attributed_area_by_HUC.csv')
 
 ''' Part 3 - Attribute OVERLAND flood extent to flood drivers (e.g., forcings) '''
 
-# def compute_waterlevel_difference(da, scen_base, scen_keys=None):
-#     # Computer the difference in water level for compound compared to maximum single driver
-#     da_single_max = da.sel(run=scen_keys).max('run')
-#     da1 = (da.sel(run=scen_base) - da_single_max).compute()
-#     da1.name = 'diff. in waterlevel\ncompound - max. single driver'
-#     da1.attrs.update(unit='m')
-#     return da1
-# 
-# 
-# da1 = compute_waterlevel_difference(da=da,
-#                                     scen_base='compound',
-#                                     scen_keys=['stormTide', 'wind', 'discharge', 'rainfall'],
-#                                     output_dir=out_dir,
-#                                     output_tif=False
-#                                     )
-# dh = 0.05
-# compound_mask = da1 > dh
-# surge_mask = da.sel(run='stormTide').fillna(0) > da.sel(
-#     run=['discharge', 'rainfall', 'wind']).fillna(0).max('run')
-# coastal_mask = da.sel(run='wind').fillna(0) > da.sel(
-#     run=['discharge', 'rainfall', 'stormTide']).fillna(0).max('run')
-# discharge_mask = da.sel(run='discharge').fillna(0) > da.sel(
-#     run=['wind', 'rainfall', 'stormTide']).fillna(0).max('run')
-# precip_mask = da.sel(run='rainfall').fillna(0) > da.sel(
-#     run=['wind', 'discharge', 'stormTide']).fillna(0).max('run')
-# # precip_mask = np.logical_and(precip_mask, da1 >= 0)
-# 
-# assert ~np.logical_and(precip_mask, surge_mask).any() and ~np.logical_and(precip_mask,
-#                                                                           coastal_mask).any() and ~np.logical_and(
-#     precip_mask, discharge_mask).any()
-# 
-# assert ~np.logical_and(discharge_mask, surge_mask).any() and ~np.logical_and(discharge_mask,
-#                                                                              coastal_mask).any()
-# assert ~np.logical_and(surge_mask, coastal_mask).any()
-# 
-# da_c = (
-#         + xr.where(surge_mask, x=compound_mask + 1, y=0)
-#         + xr.where(coastal_mask, x=compound_mask + 3, y=0)
-#         + xr.where(discharge_mask, x=compound_mask + 5, y=0)
-#         + xr.where(precip_mask, x=compound_mask + 7, y=0)
-# ).compute()
-# da_c.name = None
+
+def compute_waterlevel_difference(da, scen_base, scen_keys=None):
+    # Computer the difference in water level for compound compared to maximum single driver
+    da_single_max = da.sel(run=scen_keys).max('run')
+    da1 = (da.sel(run=scen_base) - da_single_max).compute()
+    da1.name = 'diff. in waterlevel\ncompound - max. single driver'
+    da1.attrs.update(unit='m')
+    return da1
+
+
+da1 = compute_waterlevel_difference(da=da,
+                                    scen_base='compound',
+                                    scen_keys=['stormTide', 'wind', 'discharge', 'rainfall']
+                                    )
+dh = 0.05
+compound_mask = da1 > dh
+surge_mask = da.sel(run='stormTide').fillna(0) > da.sel(
+    run=['discharge', 'rainfall', 'wind']).fillna(0).max('run')
+coastal_mask = da.sel(run='wind').fillna(0) > da.sel(
+    run=['discharge', 'rainfall', 'stormTide']).fillna(0).max('run')
+discharge_mask = da.sel(run='discharge').fillna(0) > da.sel(
+    run=['wind', 'rainfall', 'stormTide']).fillna(0).max('run')
+precip_mask = da.sel(run='rainfall').fillna(0) > da.sel(
+    run=['wind', 'discharge', 'stormTide']).fillna(0).max('run')
+# precip_mask = np.logical_and(precip_mask, da1 >= 0)
+
+assert ~np.logical_and(precip_mask, surge_mask).any() and ~np.logical_and(precip_mask,
+                                                                          coastal_mask).any() and ~np.logical_and(
+    precip_mask, discharge_mask).any()
+
+assert ~np.logical_and(discharge_mask, surge_mask).any() and ~np.logical_and(discharge_mask,
+                                                                             coastal_mask).any()
+assert ~np.logical_and(surge_mask, coastal_mask).any()
+
+da_c = (
+        + xr.where(surge_mask, x=compound_mask + 1, y=0)
+        + xr.where(coastal_mask, x=compound_mask + 3, y=0)
+        + xr.where(discharge_mask, x=compound_mask + 5, y=0)
+        + xr.where(precip_mask, x=compound_mask + 7, y=0)
+).compute()
+da_c.name = None

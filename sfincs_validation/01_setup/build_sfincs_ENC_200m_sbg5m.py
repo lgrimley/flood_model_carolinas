@@ -18,7 +18,7 @@ yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
 yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
 
 # Setup working directory and model root, create and instance of a SFINCS model to write to
-#os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
+# os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
 os.chdir('/projects/sfincs/')
 root = 'ENC_200m_sbg5m_avgN'
 mod = SfincsModel(root=root, mode='w+', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])

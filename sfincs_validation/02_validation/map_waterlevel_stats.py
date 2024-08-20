@@ -15,7 +15,6 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 
 # Load in model and read results
-# Load in model and read results
 cat_dir = r'Z:\users\lelise\data'
 yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')

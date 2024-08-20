@@ -16,17 +16,31 @@ from mpl_toolkits.axes_grid1 import make_axes_locatable
 import cartopy.crs as ccrs
 import matplotlib.gridspec as gridspec
 
-out_dir = os.path.join(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model',
-                       'process_attribution', '20m')
-os.chdir(out_dir)
 cat_dir = r'Z:\users\lelise\data'
 yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
 yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
-model_root = r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model\ENC_200m_sbg5m_avgN_adv1_eff75'
-mod = SfincsModel(model_root, mode='r',
-                  data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
+
+os.chdir(r'Z:\users\lelise\projects\Carolinas_SFINCS\Chapter1_FlorenceValidation\sfincs_models\mod_v4_flor')
+model_root = 'ENC_200m_sbg5m_avgN_adv1_eff75'
+mod = SfincsModel(model_root, mode='r', data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas])
 cat = mod.data_catalog
+
+# Load Floodmaps
+res=200
+da = xr.open_dataset(os.path.join(os.getcwd(), 'floodmaps', f'{res}m', 'floodmaps.nc'))
+
+# Create working directory
+out_dir = os.path.join(os.getcwd(), 'process_attribution', f'{res}m')
+if not os.path.exists(out_dir):
+    os.makedirs(out_dir)
+os.chdir(out_dir)
+
+# Load files created using "compound_flooding_analysis.py" script
+da_c = xr.open_dataarray('flor_peakWL_attributed_all.nc')
+da_diff = xr.open_dataset('flor_peakWL_compound_minus_maxIndiv_all.nc')
+da_c_drivers = xr.open_dataarray('flor_peakWL_attributed_toDrivers_all.nc')
+
 
 '''Load contextual layers for plotting'''
 font = {'family': 'Arial', 'size': 10}
@@ -62,9 +76,7 @@ if load_lyrs is True:
     tc_tracks = tc_tracks.clip(basins.total_bounds)
 
 '''Plot 1: Peak Flood Depth - Compound '''
-da = xr.open_dataset(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model\floodmaps\20m\floodmaps.nc')
-run_id = 'ENC_200m_sbg5m_avgN_adv1_eff75'
-da_p = da.sel(run=run_id)['hmax']
+da_p = da.sel(run=model_root)['hmax']
 plot_peak_floodmap = True
 if plot_peak_floodmap is True:
     fig, ax = plt.subplots(tight_layout=True, figsize=(6, 4.5))

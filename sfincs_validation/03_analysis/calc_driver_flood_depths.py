@@ -97,7 +97,3 @@ plt.margins(x=0, y=0)
 plt.savefig('histogram_of_depths_at_buildings_within_compoundExtent.png',
             bbox_inches='tight', dpi=255)
 plt.close()
-
-summed = np.array([0.74,0.94,0.66,0.85,0.64,0.75])
-com = np.array([0.78,0.89,0.73,0.88,0.7,0.8])
-dif = np.subtract(com, summed)
