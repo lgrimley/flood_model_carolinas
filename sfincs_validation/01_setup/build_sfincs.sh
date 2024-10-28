@@ -10,6 +10,8 @@
 module purge
 #module load python
 
+
+# setup your python environment (with conda) then use this line to activate it
 conda activate hydromt-sfincs-dev
 
 time srun python -u /projects/sfincs/build_sfincs_ENC_200m_sbg5m_noChannels.py

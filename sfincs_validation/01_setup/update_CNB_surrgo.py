@@ -11,23 +11,17 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 # Filepath to data catalog yml
-#cat_dir = '/projects/sfincs/data'
-cat_dir = r'Z:\users\lelise\data'
-yml = os.path.join(cat_dir, 'data_catalog.yml')
-cat = hydromt.DataCatalog(yml)
+cat_dir = r'Z:\Data-Expansion\users\lelise\data'
+yml = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
+yml2 = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 
 # Working directory and model root
-os.chdir(r'Z:\users\lelise\projects\Carolinas\Chapter1\sfincs\2018_Florence\mod_v6')
-#os.chdir('/projects/sfincs/')
-root = 'flo_hindcast_v6_100m_LPD2m_avgN_ksat_eff0.75'
-mod = SfincsModel(root=root, mode='r+', data_libs=yml)
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS')
+root = 'ENC_200m_sbg5m_avgN_eff75_v2'
+mod = SfincsModel(root=root, mode='r+', data_libs=[yml, yml2])
+mod.read()
+cat=mod.data_catalog
 
-ks = cat.get_rasterdataset(os.path.join(mod.root, 'gis', 'ks.tif'))
-mod.grid['ks'] = ks
-mod.write_grid()
-
-
-mod.update('flo_hindcast_v6_200m_LPD2m_avgN_ksat_eff0.75')
 
 """Setup model the Soil Conservation Service (SCS) Curve Number (CN) files for SFINCS
 including recovery term based on the soil saturation
@@ -47,11 +41,11 @@ effective : float
 block_size : float
     maximum block size - use larger values will get more data in memory but can be faster, default=2000
 """
-
-mod.setup_cn_infiltration_with_ks(lulc='nlcd_2016',
-                                  hsg='surrgo_hsg_conus',
-                                  ksat='surrgo_ksat_DCP_0to20cm_mm_carolinas',
-                                  reclass_table=r'/projects/sfincs/data/soil/surrgo/CN_Table_HSG_NLCD.csv',
+lulc = cat.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\data\ICLUS_2100_585.tif')
+mod.setup_cn_infiltration_with_ks(lulc=lulc,
+                                  hsg='gNATSGO_hsg_conus',
+                                  ksat='gNATSGO_ksat_DCP_0to20cm_carolinas',
+                                  reclass_table=r'Z:\Data-Expansion\users\lelise\data\CN_Table_HSG_ICLUS_orig.csv',
                                   effective=0.75,
                                   block_size=2000)
 mod.write()

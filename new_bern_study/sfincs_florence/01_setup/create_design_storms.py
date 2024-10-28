@@ -13,6 +13,7 @@ from hydromt import DataCatalog
 import hydromt_sfincs
 from hydromt_sfincs import SfincsModel, utils
 import datetime
+from datetime import datetime
 
 ''' Get future IDF curve scaling info '''
 
@@ -78,7 +79,6 @@ plt.close()
 # Output scaled storm totals for future IDF curves
 round(df, 4).to_csv('nbll_aic_idf_relative_change.csv')
 
-
 # Scale NOAA Atlas 14 to get total precip for future design storms
 future_cum_precip = df.copy()
 for col in future_cum_precip.columns:
@@ -134,4 +134,3 @@ for rp in rr_hr.columns:
     print('Plot forcing')
 
     mod.write()
-
