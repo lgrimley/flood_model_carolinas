@@ -7,29 +7,23 @@ import pandas as pd
 import hydromt
 from hydromt import DataCatalog
 from hydromt_sfincs import SfincsModel, utils
+import scipy.ndimage as sndi
 
-# def get_hmax_da(mod_results_dir, depfile=None, hmin=0.05):
-#     da_hmax_list = []
-#     event_ids = []
-#     for dir in os.listdir(mod_results_dir):
-#         mod.read_results(fn_map=os.path.join(results_dir, dir, 'sfincs_map.nc'))
-#         zsmax = mod.results["zsmax"].max(dim='timemax')
-#         da_zsmax_list.append(zsmax)
-#         event_ids.append(dir)
-#
-#         # Downscale results to get depth
-#         hmax = utils.downscale_floodmap(
-#             zsmax=zsmax,
-#             dep=mod.data_catalog.get_rasterdataset(depfile),
-#             hmin=hmin,
-#             gdf_mask=None,
-#             reproj_method='bilinear',
-#             floodmap_fn=os.path.join(out_dir, f'{dir}_hmax.tif'))
-#         da_hmax_list.append(hmax)
-#
-#     da_hmax = xr.concat(da_hmax_list, dim='run')
-#     da_hmax['run'] = xr.IndexVariable('run', event_ids)
-#     return da_hmax
+
+def bilinear_downscale(elevs, subgridscale):
+    """
+    Use scipy's zoom interpolator to interpolate the grid elevations
+    onto the subgrid via bilinear interpolation.
+    Much faster than regular grid interpolator for our purposes.
+    """
+    # Use scipy's zoom function for a faster bilinear interpolation from
+    # grid to subgrid
+    downscaled = sndi.zoom(
+        elevs, subgridscale, order=1, output=float, mode='constant',
+        cval=np.nan, prefilter=False, grid_mode=False
+    )
+
+    return downscaled
 
 
 def get_ensemble_runIDs(da_zsmax, storm=None, climate=None, scenario=None):
