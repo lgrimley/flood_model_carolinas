@@ -14,7 +14,7 @@ from syntheticTC_utils import *
 os.chdir(r'Z:\Data-Expansion\users\lelise\Chapter3\CMIP6_585')
 stormTide_dir = os.path.join(os.getcwd(), 'stormTide')
 track_dir = os.path.join(os.getcwd(), 'tracks')
-wl_gage_ids = pd.read_csv(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
+wl_gage_ids = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
 scenario = 'ssp585'
 
 stormTide_files = []
