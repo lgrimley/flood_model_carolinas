@@ -1,11 +1,8 @@
-import os
 import h5py
 import dask.array as da
 import matplotlib.pyplot as plt
-import scipy.io as sio
-import xarray as xr
 
-from syntheticTC_utils import *
+from src.utils import *
 
 # Connect to working directory and load data
 # os.chdir(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis\stormTide')

@@ -1,11 +1,7 @@
-import matplotlib.pyplot as plt
-import xarray as xr
-import scipy.io as sio
-import os
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
 
-from syntheticTC_utils import *
+from src.utils import *
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis')
 fname = r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100'

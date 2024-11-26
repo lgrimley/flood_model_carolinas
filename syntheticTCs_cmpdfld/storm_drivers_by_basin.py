@@ -3,7 +3,7 @@ import sys
 sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\synthetic_tc_cmpdfld')
 
 import hydromt
-from syntheticTC_utils import *
+from src.utils import *
 
 # Load in data catalog
 data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Carolinas.yml'

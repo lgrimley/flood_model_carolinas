@@ -4,7 +4,7 @@ import scipy.io as sio
 import geopandas as gpd
 import pandas as pd
 import numpy as np
-from syntheticTC_utils import track_points_to_linestring
+from src.utils import track_points_to_linestring
 
 # Load points (e.g., ADCIRC locations)
 points = pd.read_csv(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')

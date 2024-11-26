@@ -1,10 +1,9 @@
 import sys
 import matplotlib.pyplot as plt
-import pandas as pd
-import scipy.io as sio
+
 sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\synthetic_tc_cmpdfld')
 
-from syntheticTC_utils import *
+from src.utils import *
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis')
 track_dir = os.path.join(os.getcwd(), 'tracks')
