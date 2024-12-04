@@ -1,92 +1,109 @@
-import matplotlib.pyplot as plt
-import hydromt
+import os.path
 import hydromt_sfincs
 from hydromt_sfincs import SfincsModel
-import sys
+import matplotlib.pyplot as plt
 
-sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\syntheticTCs_cmpdfld')
-from src.utils import *
-
+from src.core import *
+import shutil
+import cartopy.crs as ccrs
+import cartopy.feature as cfeature
 
 # Script used to build model with Hydromt-SFINCS v.1.1.0
 print(f'Hydromt version: {hydromt.__version__}')
 print(f'Hydromt-Sfincs version: {hydromt_sfincs.__version__}')
 
-
-
+# Setup working directory and model root, create and instance of a SFINCS model to write to
 # Load in the data catalogs needed for building the model
 cat_dir = r'Z:\Data-Expansion\users\lelise\data'
 yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
 yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
 yml_sfincs_Carolinas_Ch3 = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas_Ch3.yml')
-
-# Setup working directory and model root, create and instance of a SFINCS model to write to
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup')
-root = 'base_model'
-mod = SfincsModel(root=root, mode='r+',
+root = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup\base_model'
+mod = SfincsModel(root=root, mode='r',
                   data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas, yml_sfincs_Carolinas_Ch3])
-cat = mod.data_catalog
+da = mod.grid['dep']
+wkt = da.raster.crs.to_wkt()
+utm_zone = da.raster.crs.to_wkt().split("UTM zone ")[1][:3]
+utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
+DatCat = hydromt.DataCatalog(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\data_catalog_NCEP.yml')
+for tc_index in [1234, 2645, 2773, 3429]:
+    track = SyntheticTrack(DataPaths=NCEP_DataPaths, DatCat=DatCat, tc_index=tc_index)
+    wind = track.wind
+    precip = track.precip
+    stormTide = track.stormTide
+    tide_stations = track.tide_offset_table[track.tide_offset_table['st_ht_dt'].isna()]['Point'].tolist()
+    print(tide_stations)
 
-tc_id = 2773
-# Setup directory information
-stormData_root = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis'
-track_file = os.path.join(stormData_root, r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100')
-wl_root = os.path.join(stormData_root, 'stormTide', 'adcirc_waterlevel_netcdf')
-precip_root = os.path.join(stormData_root, 'rain', '03_TCR_RainOutput_Gridded_hourly')
-wind_root = os.path.join(stormData_root, 'wind', '02_CLE15_WindOutput_Gridded')
+    # Write data as SFINCS input
+    # Updating config
+    mod.setup_config(**{"tref": track.time_range[0], "tstart": track.time_range[0], "tstop": track.time_range[1]})
+    mod.write_config(config_fn='sfincs.inp')
 
+    indices_to_remove = stormTide.where(abs(stormTide) > 100).dropna(dim='index').coords['index'].values
+    waterlevel = stormTide.drop_sel(index=indices_to_remove)
+    mod.setup_waterlevel_forcing(geodataset=waterlevel, offset='lmsl_to_navd88', buffer=2000, merge=False)
+    if len(tide_stations) > 0:
+        tide_stations_int = [int(s.split('P')[1]) for s in tide_stations]
+        tide_filler_data = track.reanalysis_data.sel(index=tide_stations)
+        tide_filler_data = tide_filler_data.assign_coords(index=tide_stations_int)
+        mod.setup_waterlevel_forcing(geodataset=tide_filler_data, offset='lmsl_to_navd88', buffer=5000, merge=True)
 
-''' Track Time information '''
-tc_tracks = sio.loadmat(f'{track_file}.mat')
-df = get_track_info_in_df(tc_id=tc_id, tc_tracks=tc_tracks)
-time = df['datetime'][df['datetime'] != 0]
+    mod.setup_precip_forcing_from_grid(precip=precip, aggregate=False)
+    mod.setup_wind_forcing_from_grid(wind=wind)
+    mod.write_forcing()
+    _ = mod.plot_forcing(fn_out=r"..\forcing.png")
+    plt.close()
 
-'''  Data '''
-fname = f'{tc_id}.nc'
-wl = cat.get_geodataset(os.path.join(wl_root, fname), crs=4326)
-precip = xr.open_dataset(os.path.join(precip_root, fname))
-wind = xr.open_dataset(os.path.join(wind_root, fname))
-wind = wind.assign_coords(spatial_ref=precip['spatial_ref'])
-wind = wind.resample(time='1H').ffill()
+    track_dir = os.path.join(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup',f'TC_{str(tc_index).zfill(4)}')
+    if os.path.exists(track_dir) is False:
+        os.makedirs(track_dir)
 
-# Updating config
-tstart = pd.to_datetime(wl['time'].min().values.astype(str)).strftime('%Y%m%d %H%M%S')
-tstop = pd.to_datetime(wl['time'].max().values.astype(str)).strftime('%Y%m%d %H%M%S')
-mod.setup_config(**{"tref": tstart, "tstart": tstart, "tstop": tstop})
-mod.write_config(config_fn='sfincs.inp')
-print(np.max(wl.sel(index=wl.index.values[0]).values))
+    files_2_move = ['precip_2d.nc', 'wind_2d.nc', 'sfincs.bnd', 'sfincs.bzs', 'sfincs.inp', r'forcing.png']
+    for file in files_2_move:
+        file_src = os.path.join(mod.root, file)
+        file_dst = os.path.join(track_dir, file)
+        _ = shutil.copyfile(file_src, file_dst)
+        print(f'Created {file_dst}')
 
-if precip['time'].max() < wl['time'].max():
-    print('Extending precip time series with zeros...')
-    precip = precip.reindex(time=wl.time).fillna(0)
-if wind['time'].max() < wl['time'].max():
-    print('Extending wind time series with zeros...')
-    wind = wind.reindex(time=wl.time).fillna(0)
+    # Now generate the tide only inputs and plot the forcing (used in runoff only scenario)
+    map = track.coastal_locations_mapped
+    tides_only = track.reanalysis_data.sel(index=map['Point'].tolist())
+    tide_stations_int = [int(s.split('P')[1]) for s in map['Point'].tolist()]
+    tides_only2 = tides_only.assign_coords(index=tide_stations_int)
 
+    mod.setup_waterlevel_forcing(geodataset=tides_only2, offset='lmsl_to_navd88', buffer=2000, merge=False)
+    mod.write_forcing()
+    _ = mod.plot_forcing(fn_out=r"..\forcing.png")
+    plt.close()
+    files_2_move = ['sfincs.bnd', 'sfincs.bzs', r'forcing.png']
+    for file in files_2_move:
+        file_src = os.path.join(mod.root, file)
+        file_dst = os.path.join(track_dir, f'tides_{file}')
+        _ = shutil.copyfile(file_src, file_dst)
+        print(f'Created {file_dst}')
 
-# Write data as SFINCS input
-SLR = 0.0
-indices_to_remove = wl.where(abs(wl) > 100).dropna(dim='index').coords['index'].values
-cleaned_wl = wl.drop_sel(index=indices_to_remove)
-#cleaned_wl.assign_coords(spatial_ref = cleaned_wl.attrs['spatial_ref'])
-wl = cleaned_wl + SLR
-print(np.max(wl.sel(index=wl.index.values[0]).values))
-
-mod.setup_waterlevel_forcing(geodataset=wl,
-                             offset='lmsl_to_navd88',
-                             timeseries=None, locations=None,
-                             buffer=10000, merge=False
-                             )
-
-mod.setup_precip_forcing_from_grid(precip=precip, aggregate=False)
-mod.setup_wind_forcing_from_grid(wind=wind)
-mod.write_forcing()
-_ = mod.plot_forcing(fn_out="forcing.png")
-plt.close()
-
-
-
-
-
+    # Plot the track and total precipitation
+    track_geom = track.track_points_to_linestring
+    track_geom = track_geom.to_crs(32617)
+    fig, ax = plt.subplots(nrows=1, ncols=1, tight_layout=True,
+                           figsize=(6, 8), subplot_kw={'projection': utm})
+    ax.add_feature(cfeature.COASTLINE, zorder=2)
+    cm = mod.forcing['precip_2d'].sum(dim='time').plot(ax=ax, cmap='jet', add_colorbar=False)
+    mod.region.plot(ax=ax, color='none', edgecolor='black')
+    track_geom.plot(ax=ax, color='black', linewidth=3)
+    pos0 = ax.get_position()
+    cax = fig.add_axes([pos0.x1 + 0.3, pos0.y0+0.15, 0.05, pos0.height * 0.6])
+    cbar = fig.colorbar(cm,
+                        cax=cax,
+                        orientation='vertical',
+                        extend='max',
+                        label = 'Total Precip (mm)'
+                        )
+    ax.set_title(tc_index)
+    minx, miny, maxx, maxy = mod.region.total_bounds
+    ax.set_xlim(minx, maxx)
+    ax.set_ylim(miny, maxy)
+    plt.savefig(os.path.join(track_dir, f'track.png'), dpi=300, bbox_inches="tight")
+    plt.close()
 

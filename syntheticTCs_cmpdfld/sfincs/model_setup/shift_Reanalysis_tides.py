@@ -1,89 +1,69 @@
+import hydromt
 from src.utils import *
+from src.core import NCEP_DataPaths, SyntheticTrack
+import matplotlib.pyplot as plt
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs')
+tc_index = 2773
+DatCat = hydromt.DataCatalog(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\data_catalog_NCEP.yml')
+track = SyntheticTrack(DataPaths=NCEP_DataPaths, DatCat=DatCat, tc_index=tc_index)
+stormTide = track.stormTide
+tides = track.reanalysis_data
+map_index = track.coastal_locations_mapped
+tstart, tend = track.track_time
 
-'''
-Load station mapping table, track file, and reanalysis data
-'''
-# Mapping the stormTide ADCIRC to the reanalysis extraction locations
-match_file = r'.\NCEP_Reanalysis\stormTide\map_Reanalysis_to_stormTideLocs.csv'
-if os.path.exists(match_file) is False:
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\reanalysis_shift')
+stations_st = []
+highTide_time_st = []
+stations_re = []
+highTide_time_re = []
+for station_id in stormTide.index.values:
+    # Get the high tide time lag of the ADCIRC Storm Tide gages
+    sta_st = stormTide.sel(index=station_id).to_dataframe()
+    sta_st['delta_waterlevel'] = sta_st['waterlevel'].diff()
+    st_empty = sta_st[(sta_st['delta_waterlevel'] == 0.0)]
+    st_empty_tstart = st_empty.index[0]
+    tide_st = stormTide.sel(index=station_id).sel(time=slice(st_empty_tstart - pd.to_timedelta('12h'), st_empty_tstart))
 
-    reanalysis_locs = pd.read_csv(r'.\EDSReanalysis_data\full_data_meta.csv')
-    stormTide_locs = pd.read_csv(r'.\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
-    stormTide_locs['gage_id'] = stormTide_locs['gage_id'].astype(int)
+    tide_st = tide_st.to_dataframe()
+    tide_st['delta_waterlevel'] = tide_st['waterlevel'].diff() # Calculate the difference in water levels across time
+    increasing_trend = tide_st[tide_st['delta_waterlevel'] > 0] # Identify where water level is increasing
+    sta_highTide_time = increasing_trend['waterlevel'].idxmax()
+    highTide_time_st.append(sta_highTide_time)
+    stations_st.append(station_id)
 
-    reanalysis_locs = gpd.GeoDataFrame(reanalysis_locs,
-                                       geometry=gpd.points_from_xy(x=reanalysis_locs['LON'],y=reanalysis_locs['LAT'],
-                                                                   crs=4326)).to_crs(32617)
-    stormTide_locs = gpd.GeoDataFrame(stormTide_locs,
-                                       geometry=gpd.points_from_xy(x=stormTide_locs['x'],y=stormTide_locs['y'],
-                                                                   crs=4326)).to_crs(32617)
+    # Get the high tide time lag of the corresponding Reanalysis gages
+    re_id = map_index[map_index['gage_id'] == station_id]['Point'].item()
+    sta_re = tides.sel(index=re_id).sel(time=slice(tend, tend + pd.to_timedelta('12h')))
+    sta_re = sta_re.to_dataframe()
+    sta_re['delta_waterlevel'] = sta_re['waterlevel'].diff() # Calculate the difference in waterlevels across time
+    increasing_trend = sta_re[sta_re['delta_waterlevel'] > 0] # Identify where water level is increasing
+    sta_highTide_time_re = increasing_trend['waterlevel'].idxmax()
+    highTide_time_re.append(sta_highTide_time_re)
+    stations_re.append(re_id)
+    print(station_id)
 
-    match = stormTide_locs.sjoin_nearest(reanalysis_locs, how='left', max_distance=2000)
-    match['gage_id'] = match['gage_id'].astype(int)
-    match.to_csv(r'.\NCEP_Reanalysis\stormTide\map_Reanalysis_to_stormTideLocs.csv')
-else:
-    match = pd.read_csv(match_file, index_col=0)
-    match = gpd.GeoDataFrame(match, geometry=gpd.points_from_xy(x=match['LON'],y=match['LAT'],crs=4326))
-    print('Mapping table for ADCIRC Reanalysis and Storm Tide stations loaded!')
+    # Plot water level
+    compare = pd.concat(objs=[sta_st, sta_re], axis=1, ignore_index=False)
+    dfp = compare['waterlevel']
+    dfp.columns = ['stormTide', 'reanalysis']
 
-# Load the storm tracks
-track_file = r'.\NCEP_Reanalysis\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'
-tc_tracks = sio.loadmat(track_file)
-
-# Reanalysis data from ADCIRC EDS v2
-reanalysis = xr.open_dataset(r'.\EDSReanalysis_data\EDSReanalysis_V2_1992_2022.nc', engine='netcdf4')
-stormTide_dir = r'.\NCEP_Reanalysis\stormTide\adcirc_waterlevel_netcdf'
-
-
-for tc_id in [1234, 2645, 2773, 3429]:
-    track_df = get_track_info_in_df(tc_id, tc_tracks)
-    track_df = track_df[track_df['datetime'] != 0]
-    track_tstart = track_df['datetime'].iloc[0]
-    track_tend = track_df['datetime'].iloc[-1]
-
-    # Open the netcdf of water level time series for the TC
-
-    file = f'{str(tc_id).zfill(4)}.nc'
-    adcirc_st = xr.open_dataset(os.path.join(stormTide_dir, file), engine='netcdf4')
-    adcirc_st_stations =  adcirc_st.index.values
-    adcirc_st_tstart = pd.to_datetime(adcirc_st.time.min().values)
-    adcirc_st_tend = pd.to_datetime(adcirc_st.time.max().values)
-
-    print(f'Track start at: {track_tstart}')
-    print(f'ADCIRC start at: {adcirc_st_tstart}')
-    print(f'Track end at: {track_tend}')
-    print(f'ADCIRC end at: {adcirc_st_tend}')
-
-    min_tstart = min(track_tstart, adcirc_st_tstart)
-    max_tend = max(track_tend, adcirc_st_tend)
+    fig, ax = plt.subplots(figsize=(5, 4), layout='constrained')
+    dfp.plot(ax=ax, legend=True)
+    ax.axvline(x=sta_highTide_time_re, color= 'grey')
+    ax.axvline(x=sta_highTide_time, color='black')
+    ax.set_xlabel('')
+    ax.set_ylabel('Water Level (m+MSL)')
+    plt.title(f'{np.abs(sta_highTide_time - sta_highTide_time_re)}')
+    plt.savefig(rf'{str(tc_index).zfill(4)}_tideShift_{station_id}_backend.png')
+    plt.close()
 
 
-    stations_st = []
-    highTide_time_st = []
-    stations_re = []
-    highTide_time_re = []
-    for station_id in adcirc_st.index.values:
-        # Get the high tide time lag of the ADCIRC Storm Tide gages
-        sta = adcirc_st.sel(index=station_id).sel(time=slice(min_tstart, min_tstart + pd.to_timedelta('12h')))
-        sta_highTide_time = pd.to_datetime(sta['waterlevel'].idxmax(dim='time').values)
-        highTide_time_st.append(sta_highTide_time)
-        stations_st.append(station_id)
-
-        # Get the high tide time lag of the corresponding Reanalysis gages
-        re_id = match[match['gage_id'] == station_id]['Point'].item()
-        sta = reanalysis.sel(index=re_id).sel(time=slice(min_tstart, min_tstart + pd.to_timedelta('12h')))
-        sta_highTide_time = pd.to_datetime(sta['waterlevel'].idxmax(dim='time').values)
-        highTide_time_re.append(sta_highTide_time)
-        stations_re.append(re_id)
-
-    tide_df = pd.DataFrame()
-    tide_df['stations_st'] = stations_st
-    tide_df['high_tide_st'] = highTide_time_st
-    tide_df['stations_re'] = stations_re
-    tide_df['high_tide_re'] = highTide_time_re
-    tide_df['st_minus_re'] = tide_df['high_tide_st'] - tide_df['high_tide_re']
-    tide_df['abs'] = np.abs(tide_df['st_minus_re'])
-    outfile = rf'.\NCEP_Reanalysis\stormTide\ADCIRC_storm_vs_reanalysis\{tc_id}_comparison.csv'
-    tide_df.to_csv(outfile)
+tide_df = pd.DataFrame()
+tide_df['stations_st'] = stations_st
+tide_df['high_tide_st'] = highTide_time_st
+tide_df['stations_re'] = stations_re
+tide_df['high_tide_re'] = highTide_time_re
+tide_df['st_minus_re'] = tide_df['high_tide_st'] - tide_df['high_tide_re']
+tide_df['abs'] = np.abs(tide_df['st_minus_re'])
+outfile = f'{tc_index}_comparison_backend.csv'
+tide_df.to_csv(outfile)

@@ -47,3 +47,46 @@ wind_{tc_id}:
     data_ref: https://www.nature.com/articles/s41558-021-01272-7"""
 
             fcat.write(yml_str)
+
+
+data_dir = r'.\stormTide\adcirc_waterlevel_netcdf'
+with open(data_lib, mode="a") as fcat:
+    for file in os.listdir(data_dir):
+        if file.endswith('.nc'):
+            tc_id = file.split('.')[0]
+            yml_str = f"""
+stormTide_{tc_id}:
+  path: {os.path.join(data_dir, file)}
+  data_type: GeoDataset
+  driver: netcdf
+  crs: 4326
+  meta:
+    category: waterlevel
+    units: m+MSL
+    description: hourly modeled water levels for synthetic tropical cyclone tracks
+    title: Synthetic TC ADCIRC StormTide
+    model_ref: ADCIRC
+    publication_date: 2022
+    data_ref: https://www.nature.com/articles/s41558-021-01272-7"""
+
+            fcat.write(yml_str)
+
+
+data_dir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\EDSReanalysis_data'
+file = 'EDSReanalysis_V2_1992_2022.nc'
+with open(data_lib, mode="a") as fcat:
+    yml_str = f"""
+tide_reanalysis:
+  path: {os.path.join(data_dir, file)}
+  data_type: GeoDataset
+  driver: netcdf
+  crs: 4326
+  meta:
+    category: waterlevel
+    units: m+MSL
+    description: https://github.com/RENCI/EDSReanalysis
+    title: ADCIRC tide reanalysis V2
+    model_ref: ADCIRC
+    publication_date: 2024
+    data_ref: https://renci.github.io/edsreanalysisdoc/"""
+    fcat.write(yml_str)

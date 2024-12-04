@@ -1,12 +1,8 @@
-import os
-
 import hydromt_sfincs
-import sys
 import matplotlib.pyplot as plt
-import pandas as pd
-
-sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\syntheticTCs_cmpdfld')
-from SFINCS_postP_utils import *
+from src.SFINCS_postP_utils import *
+from src.utils import *
+from src.core import NCEP_DataPaths, SyntheticTrack
 
 # Script used to build model with Hydromt-SFINCS v.1.1.0
 print(f'Hydromt version: {hydromt.__version__}')
@@ -23,8 +19,28 @@ mod = SfincsModel(root=root, mode='r',
                   data_libs=[yml_base_CONUS, yml_base_Carolinas, yml_sfincs_Carolinas, yml_sfincs_Carolinas_Ch3])
 cat = mod.data_catalog
 
+for tc_id in [2773]:  #2773, 3429, 2645
+    track = SyntheticTrack(tc_id=tc_id, DataPaths=NCEP_DataPaths)
+
+precip = track.precip_data.sum(dim='time')['precip']
+print(track.precip_data.time.min().values)
+print(track.precip_data.time.max().values)
+precip = precip.raster
+precip.set_crs(4326)
+tc_dir = fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup\TC_{tc_id}'
+precip.to_raster(os.path.join(tc_dir, f'precip_tot.tif'), nodata=-9999.0)
+
+sfincs_precip = cat.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup\TC_2773\bc_inputs\precip_2d.nc')
+print(sfincs_precip.time.min().values)
+print(sfincs_precip.time.max().values)
+precip = sfincs_precip.sum(dim='time')
+precip = precip.raster
+precip.set_crs(4326)
+tc_dir = fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup\TC_{tc_id}'
+precip.to_raster(os.path.join(tc_dir, f'precip_tot_sfincs_OLD.tif'), nodata=-9999.0)
+
 ''' Loop through and get the model results '''
-tc_id = 2645
+tc_id = 2773
 tc_dir = fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\SFINCS_mod_setup\TC_{tc_id}'
 os.chdir(tc_dir)
 
@@ -35,6 +51,11 @@ for scen in scenarios:
     print(scen)
     mod.read_results(fn_map=os.path.join(tc_dir, scen, 'sfincs_map.nc'), fn_his=os.path.join(tc_dir, scen, 'sfincs_his.nc'))
     zsmax = mod.results["zsmax"].max(dim='timemax')
+
+    hmax = mod.results['zsmax'] - mod.grid['dep']
+    ras = hmax.raster
+    ras.set_crs(32617)
+    ras.to_raster(os.path.join(tc_dir, f'hmax_{scen}.tif'), nodata=-9999.0)
     da_zsmax_list.append(zsmax)
 
 da_zsmax = xr.concat(da_zsmax_list, dim='run')
