@@ -9,26 +9,61 @@ import scipy.io as sio
 from shapely.geometry import LineString
 from pathlib import Path
 from typing import Self
+import sys
 
+
+def find_nearest_non_nan_index(df, col_name, index):
+    """Finds the nearest non-NaN index value in the specified column.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+        col_name (str): The name of the column to search in.
+        index (int): The index value from which to search.
+
+    Returns:
+        int: The index of the nearest non-NaN value, or None if no such value exists.
+    """
+
+    # Get the non-NaN indices in the column
+    non_nan_indices = df[col_name].dropna().index
+
+    # Find the nearest non-NaN index
+    if non_nan_indices.empty:
+        return None  # No non-NaN values in the column
+    else:
+        return non_nan_indices[np.abs(non_nan_indices - index).argmin()]
 
 
 def calculate_station_highTide_time(da: xr.Dataset,
-                                    tref: pd.DatetimeIndex, station_names: list = None) -> pd.DataFrame:
+                                    tref: pd.DatetimeIndex,
+                                    station_names: list = None) -> pd.DataFrame:
     if station_names is None:
         station_names = da.index.values
 
     highTide_times = []
+    sta_keep = []
     for station in station_names:
         # Get the high tide time lag of the ADCIRC Storm Tide gages
         data = da.sel(index=station).sel(time=slice(tref, tref + pd.to_timedelta('12h')))
         df = data.to_dataframe()
+
         df['delta_waterlevel'] = df['waterlevel'].diff()  # Calculate the difference in water levels across time
         increasing_trend = df[df['delta_waterlevel'] > 0]  # Identify where water level is increasing
-        station_highTide_time = increasing_trend['waterlevel'].idxmax()
-        highTide_times.append(station_highTide_time)
+        try:
+            if len(increasing_trend) > 0:
+                ind = np.argmax(increasing_trend['waterlevel'])
+                station_highTide_time = increasing_trend.index[ind]
+            else:
+                ind = np.argmax(df['waterlevel'])
+                station_highTide_time = df.index[ind]
+            highTide_times.append(station_highTide_time)
+            sta_keep.append(station)
+        except:
+            print(f"Issue with {station}")
+            pass
 
     highTide_df = pd.DataFrame()
-    highTide_df['station'] = station_names
+    highTide_df['station'] = sta_keep
     highTide_df['highTide_time'] = highTide_times
     highTide_df.set_index(keys='station', drop=True, inplace=True)
     return highTide_df
@@ -36,13 +71,13 @@ def calculate_station_highTide_time(da: xr.Dataset,
 
 class DataPaths:
     adcirc_reanalysis_locs_filepath = Path(
-        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\EDSReanalysis_data\full_data_meta.csv')
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\full_data_meta.csv')
     adcirc_reanalysis_data_filepath = Path(
-        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\EDSReanalysis_data\EDSReanalysis_V2_1992_2022.nc')
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\EDSReanalysis_V2_1992_2022.nc')
     adcirc_stormTide_locs_filepath = Path(
-        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
     adcirc_loc_mapping_filepath = Path(
-        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\stormTide\map_Reanalysis_to_stormTideLocs.csv')
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\stormTide\map_Reanalysis_to_stormTideLocs.csv')
 
     def __init__(
             self: Self,
@@ -65,58 +100,93 @@ class SyntheticTrack:
             DataPaths,
             DatCat: hydromt.DataCatalog = None,
             tc_index: int = None,
+            coastal_locations_mapped: pd.DataFrame = None,
     ):
-
         self.DataPaths = DataPaths
         self.DatCat = DatCat
         self.tc_index = tc_index
-        self.filename = f'{str(tc_index).zfill(4)}.nc'
+        self.tc_index_padded = str(tc_index).zfill(4)
+        self.filename = f'{self.tc_index_padded}.nc'
+        self.coastal_locations_mapped = coastal_locations_mapped
 
         # Read in a geodataframe of the track information from the MAT file
-        self.track_information = self.prepare_track_information(tracks_file=DataPaths.tracks_filepath,
-                                                                tc_index=tc_index)
-        self.track_time = self.get_track_time(track_information=self.track_information)
-        self.stormTide = self.get_stormTide_data(DatCat=DatCat, dataName=f'stormTide_{tc_index}')
-        self.adcirc_time = self.get_stormTide_time(stormTide=self.stormTide)
+        try:
+            self.track_information = self.prepare_track_information(tracks_file=DataPaths.tracks_filepath,
+                                                                    tc_index=tc_index)
+            self.track_time = self.get_track_time(track_information=self.track_information)
+            print('Track information loaded from mat file.')
+        except:
+            print('Issue reading track information from mat file.')
+            breakpoint()
+
+        try:
+            self.stormTide = self.DatCat.get_geodataset(data_like=f'stormTide_{self.tc_index_padded}')
+            self.adcirc_time = self.get_stormTide_time(stormTide=self.stormTide)
+            print('Stormtide data loaded from Hydromt Datacatalog.')
+        except:
+            print('Issue reading stormtide netcdf.')
+            breakpoint()
 
         tmin = min(self.track_time[0], self.adcirc_time[0])
-        tmax = max(self.track_time[1], self.adcirc_time[1])
+        tmax = max(self.track_time[1], self.adcirc_time[1]) + pd.to_timedelta('5d')
         self.time_range = (tmin, tmax)
         print(self.time_range)
 
         # Create a dataframe for mapping the ADCIRC reanalysis and stormtide stations because both are used
         # for creating the coastal water level boundary conditions
-        self.coastal_locations_mapped = self.coastal_boundary_condition_locations(
-            adcirc_reanalysis_locs_filepath=DataPaths.adcirc_reanalysis_locs_filepath,
-            adcirc_stormTide_locs_filepath=DataPaths.adcirc_stormTide_locs_filepath)
+        if self.coastal_locations_mapped is None:
+            try:
+                self.coastal_locations_mapped = self.coastal_boundary_condition_locations(
+                    adcirc_reanalysis_locs_filepath=DataPaths.adcirc_reanalysis_locs_filepath,
+                    adcirc_stormTide_locs_filepath=DataPaths.adcirc_stormTide_locs_filepath)
+                print('Loaded coastal gage locations and create mapping table.')
+            except:
+                print('Issue loading coastal gage locations and create mapping table.')
+                breakpoint()
 
         # Read in all ADCIRC reanalysis data for the TC time period, buffer 15 days on either end of the storm
         buff_time = (self.time_range[0] - pd.Timedelta(days=15), self.time_range[1] + pd.Timedelta(days=15))
-        self.reanalysis_data = self.DatCat.get_geodataset(data_like=f'tide_reanalysis',
-                                                          time_tuple=buff_time)
-
+        self.reanalysis_data = self.DatCat.get_geodataset(data_like=f'tide_reanalysis', time_tuple=buff_time)
+        print('Load reanalysis data for storm dates with 15 day buffer on either end.')
 
         if self.DataPaths.wind_dir is not None:
             self.wind = self.prepare_gridded_data(DatCat=DatCat,
-                                                  dataName=f'wind_{tc_index}', track_time=self.time_range)
+                                                  dataName=f'wind_{self.tc_index_padded}', track_time=self.time_range)
+            print('Load wind data from the Hydromt Datacatalog.')
+
         if self.DataPaths.precip_dir is not None:
             self.precip = self.prepare_gridded_data(DatCat=DatCat,
-                                                    dataName=f'precip_{tc_index}', track_time=self.time_range)
-        print('Track geometry and boundary condition files loaded.')
+                                                    dataName=f'precip_{self.tc_index_padded}', track_time=self.time_range)
+            print('Load precipitation data from the Hydromt Datacatalog.')
 
+        self.stormTide = self.prepare_stormTide_data(stormTide = self.stormTide, track_time=self.time_range)
+        print('Stormtide data cleaned.')
+        print('Calculating high tide offset between ADCIRC StormTide and Reanalysis data...')
         self.tide_offset_table = self.calculate_reanalysis_tide_offset(mapped_stations=self.coastal_locations_mapped,
                                                                        stormTide=self.stormTide,
                                                                        reanalysis=self.reanalysis_data,
                                                                        tref=self.adcirc_time[0])
+        print('Tide offset table created for reanalysis and stormtide gages.')
 
+        self.reanalysis_data_offset = self.shift_reanalysis_tides(mapped_stations=self.coastal_locations_mapped,
+                                                                  tide_offset_table=self.tide_offset_table,
+                                                                  reanalysis=self.reanalysis_data)
+        print('Reanalysis gage data offset to match tides from stormdata.')
+
+        self.merged_waterlevel = self.merge_stormTide_with_shiftedReanalysis(stormTide=self.stormTide,
+                                               tide_offset_table=self.tide_offset_table,
+                                               reanalysis_data_offset=self.reanalysis_data_offset)
+
+        print('Shifted reanalysis tides appended to cleaned Stormtide data for writing to SFINCS input.')
 
     @staticmethod
-    def get_stormTide_data(DatCat: hydromt.DataCatalog, dataName: str) -> xr.Dataset:
-        stormTide = DatCat.get_geodataset(data_like=dataName)
+    def prepare_stormTide_data(stormTide: xr.Dataset, track_time: tuple) -> xr.Dataset:
         indices_to_remove = stormTide.where(abs(stormTide) > 100).dropna(dim='index').coords['index'].values
         print(f'Index of StormTide Stations Removed: {indices_to_remove}')
         stormTide = stormTide.drop_sel(index=indices_to_remove)
-        return stormTide
+        time_target = pd.date_range(start=track_time[0], end=track_time[1], freq='h')
+        da = stormTide.reindex(time=time_target).fillna(0)
+        return da
 
     @staticmethod
     def prepare_gridded_data(DatCat: hydromt.DataCatalog, dataName: str, track_time: tuple) -> xr.Dataset:
@@ -209,31 +279,46 @@ class SyntheticTrack:
                                          stormTide: xr.Dataset,
                                          reanalysis: xr.Dataset,
                                          tref: pd.DatetimeIndex) -> pd.DataFrame:
-        print('Calculating high tide offset between ADCIRC StormTide and Reanalysis data...')
-        sta_df1 = calculate_station_highTide_time(da=stormTide, tref=tref, station_names=None)
-        sta_df1 = pd.concat(objs=[sta_df1, mapped_stations.set_index('gage_id')['Point']], axis=1)
 
-        sta_df2 = calculate_station_highTide_time(da=reanalysis, tref=tref,
-                                                  station_names=mapped_stations['Point'].tolist())
-        sta_df2 = pd.concat(objs=[sta_df2, mapped_stations.set_index('Point')['gage_id']], axis=1)
+        try:
+            sta_df1 = calculate_station_highTide_time(da=stormTide, tref=tref, station_names=None)
+            sta_df1 = pd.concat(objs=[sta_df1, mapped_stations.set_index('gage_id')['Point']], axis=1)
+            print('High tide time calculated for stormtide gages.')
+        except:
+            print('Issue calculating station highTide time for stormtide data...')
+
+        try:
+            sta_df2 = calculate_station_highTide_time(da=reanalysis, tref=tref,
+                                                      station_names=mapped_stations['Point'].tolist())
+            sta_df2 = pd.concat(objs=[sta_df2, mapped_stations.set_index('Point')['gage_id']], axis=1)
+            print('High tide time calculated for reanalysis gages.')
+        except:
+            print('Issue calculating station highTide time for reanalysis data...')
 
         sta_df = pd.concat(objs=[sta_df1, sta_df2.set_index('gage_id')], axis=1)
         sta_df.columns = ['st_ht_dt', 'Point', 're_ht_dt']
         sta_df['offset'] = sta_df['st_ht_dt'] - sta_df['re_ht_dt']
-
+        sta_df.sort_index(axis=0, ascending=True, inplace=True)
+        sta_df['offset_fill'] = sta_df['offset'].interpolate(method='pad')
         return sta_df
 
-    @property
-    def shift_reanalysis_tides(self) -> xr.Dataset:
+    @staticmethod
+    def shift_reanalysis_tides(mapped_stations: gpd.GeoDataFrame,
+                               tide_offset_table: pd.DataFrame,
+                               reanalysis: xr.Dataset) -> xr.Dataset:
         print('Applying temporal shift to Reanalysis data...')
-        da = self.reanalysis_data.sel(index=self.coastal_locations_mapped['Point'].tolist())
-        for sta in self.tide_offset_table['Point']:
-            time_offset = self.tide_offset_table[self.tide_offset_table['Point'] == sta]['offset'].item()
+        da = reanalysis.sel(index=mapped_stations['Point'].tolist())
+
+        mdf = pd.DataFrame()
+        mdf['time'] = da.time.values
+        mdf.set_index('time', inplace=True, drop=True)
+        for sta in tide_offset_table['Point']:
+            time_offset = tide_offset_table[tide_offset_table['Point'] == sta]['offset_fill'].item()
+            data = da.sel(index=sta)
+            df = data.to_dataframe()
+            df_out = df
             if time_offset is not pd.NaT:
                 if abs(time_offset) > datetime.timedelta(0):
-                    data = da.sel(index=sta)
-                    df = data.to_dataframe()
-
                     df_shift = df.copy()
                     df_shift['offset'] = data.time + time_offset
                     df_shift = df_shift[['waterlevel', 'offset']]
@@ -241,14 +326,49 @@ class SyntheticTrack:
 
                     df_out = pd.concat(objs=[df['index'], df_shift], axis=1, ignore_index=False, join='outer')
                     df_out = df_out[df_out.index.isin(df.index)]
-                    da.sel(index=sta).values = df_out['waterlevel'].to_numpy()
-                else:
-                    continue
+
+            mdf = pd.concat(objs=[mdf, df_out['waterlevel']], axis=1, ignore_index=False)
+        mdf.columns = mapped_stations['Point'].tolist()
+        da.data = mdf
         return da
+
+    @staticmethod
+    def merge_stormTide_with_shiftedReanalysis(stormTide,
+                                               tide_offset_table,
+                                               reanalysis_data_offset) -> xr.Dataset:
+        mdf = pd.DataFrame()
+        mdf['time'] = stormTide.time
+        mdf.set_index('time', inplace=True, drop=True)
+        for sta in stormTide.index.values:
+            # Load the station storm tide data
+            wl = stormTide.sel(index=sta).to_dataframe()
+            wl['delta_waterlevel'] = wl['waterlevel'].diff()  # Calculate the difference in water levels across time
+            notrend_time = wl[wl['delta_waterlevel'] == 0].idxmin()  # Identify where water level is increasing
+
+            # Get the time when model output zeroed
+            t1 = notrend_time[0] - pd.Timedelta('1h')
+            t2 = wl.index[-1]
+
+            # Pull the shifted reanalysis data for this gage
+            tide_gage = tide_offset_table[tide_offset_table.index == sta]['Point'].item()
+            tide_data = reanalysis_data_offset.sel(index=tide_gage).to_dataframe()[['waterlevel']]
+            tide_data.columns = ['tides']
+            tide_subset = tide_data[tide_data.index >= t1]
+
+            # Replace the zero stormTide data with the shifted, reanalysis tides
+            new_ts = pd.concat([wl, tide_subset], axis=1)
+            new_ts['waterlevel'][new_ts.index >= t1] = new_ts['tides'][new_ts.index >= t1]
+            new_ts = new_ts[new_ts.index <= t2]
+            new_ts = new_ts[['waterlevel']]
+
+            mdf = pd.concat(objs=[mdf,new_ts], axis=1, ignore_index=False)
+        mdf.columns = stormTide.index.values
+        stormTide.data = mdf
+        return stormTide
 
 
 NCEP_DataPaths = DataPaths(
-    root=Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis'),
+    root=Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis'),
     tracks_filepath=Path(r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'),
     adcirc_stormTide_dir=Path(r'.\stormTide\adcirc_waterlevel_netcdf'),
     wind_dir=Path(r'.\wind\02_CLE15_WindOutput_Gridded'),

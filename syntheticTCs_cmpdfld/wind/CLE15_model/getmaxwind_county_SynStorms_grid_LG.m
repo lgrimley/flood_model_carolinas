@@ -3,7 +3,7 @@ clc
 
 % get the maximum wind speed over each county 
 gcm = {'canesm_ssp585'; 'cnrm6_ssp585'; 'ecearth6_ssp585'; 'ipsl6_ssp585'; 'miroc6_ssp585'}; 
-cd 'Z:\Data-Expansion\users\lelise\Chapter3\CMIP6_585';
+cd 'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585';
 
 for kk = 1:length(gcm)
     trackpath = fullfile('.\tracks', strcat('UScoast6_AL_', gcm{kk}, 'cal_roEst1rmEst1_trk100'));

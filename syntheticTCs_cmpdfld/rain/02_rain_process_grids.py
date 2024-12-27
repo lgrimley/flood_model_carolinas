@@ -1,27 +1,39 @@
 import warnings
 warnings.simplefilter(action='ignore', category=FutureWarning)
-
+from src.core import *
 from src.utils import *
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\Chapter3\NCEP_Reanalysis')
-fname = r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100'
-tc_tracks = sio.loadmat(f'{fname}.mat')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585')
+gcms = ['canesm_ssp585cal', 'cnrm6_ssp585cal', 'ecearth6_ssp585cal', 'ipsl6_ssp585cal', 'miroc6_ssp585cal']
+missing = []
+for gcm in gcms:
+    missing.append(gcm)
+    fname = f'UScoast6_AL_{gcm}_roEst1rmEst1_trk100.mat'
+    tc_tracks = sio.loadmat(fr'.\tracks\{fname}')
+    #tc_select = pd.read_csv(fr'.\tracks\{fname}_200km.csv')
+    tc_select = pd.read_csv(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585\stormTide\stormTide_TCIDs_and_gageCounts_{gcm}.csv')
 
-''' RAINFALL to netcdf '''
-input_dir = r'.\rain\02_TCR_RainOutput_Gridded'
-output_dir = r'.\rain\03_TCR_RainOutput_Gridded_hourly'
-figs_dir = r'.\rain\TotalPrecip_Figs'
-usa = gpd.read_file(r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\us_boundary\cb_2018_us_state_500k'
-                    r'\cb_2018_us_state_500k.shp')
+    ''' RAINFALL to netcdf '''
+    input_dir = fr'.\rain\TCR_Gridded_{gcm}'
+    output_dir = fr'.\rain\TCR_Gridded_{gcm}_hourly'
+    if os.path.exists(output_dir) is False:
+        os.makedirs(output_dir)
+    # figs_dir = r'.\rain\TotalPrecip_Figs'
+    # usa = gpd.read_file(r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\us_boundary\cb_2018_us_state_500k'
+    #                     r'\cb_2018_us_state_500k.shp')
 
-for rain_file in os.listdir(input_dir):
-    if rain_file.endswith('.nc'):
-        tc_id = int(rain_file.split('.')[0])
+    for tc_id in tc_select['tc_id'].tolist():
+        tc_id = int(tc_id)
         file = f'{str(tc_id).zfill(4)}.nc'
-        out_name = os.path.join(output_dir, file)
 
+        if os.path.exists(os.path.join(input_dir, file)) is False:
+            missing.append(tc_id)
+            print(f'{tc_id} raw rainfall has not been processed!')
+            continue
+
+        out_name = os.path.join(output_dir, file)
         if os.path.exists(out_name) is False:
-            print(tc_id)
+            print(f'Regridding rainfall for {tc_id}')
 
             # Get the track information w/ datetime
             df = get_track_info_in_df(tc_id=tc_id, tc_tracks=tc_tracks)
