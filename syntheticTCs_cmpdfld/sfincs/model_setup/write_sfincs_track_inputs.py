@@ -27,7 +27,7 @@ wkt = mod.grid['dep'].raster.crs.to_wkt()
 utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
 utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
 
-tc_index = 5008
+
 # Load the data catalog where track data is saved
 DatCat = hydromt.DataCatalog(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\data_catalog_NCEP.yml')
 

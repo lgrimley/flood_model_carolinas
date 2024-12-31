@@ -6,10 +6,12 @@ import pandas as pd
 import geopandas as gpd
 import xarray as xr
 import scipy.io as sio
+from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
 from shapely.geometry import LineString
 from pathlib import Path
 from typing import Self
 import sys
+from hydromt_sfincs import SfincsModel
 
 
 def find_nearest_non_nan_index(df, col_name, index):
@@ -67,6 +69,33 @@ def calculate_station_highTide_time(da: xr.Dataset,
     highTide_df['highTide_time'] = highTide_times
     highTide_df.set_index(keys='station', drop=True, inplace=True)
     return highTide_df
+
+def process_tmax_in_hours(tmax: xr.DataArray, time_min_hr: int = 0) -> xr.DataArray:
+    # Get the time of inundation above twet_threshold
+    #tmax = da['tmax'].max(dim='timemax')
+
+    # Create a mask of the NaT values
+    #mask = np.isnat(tmax.values)
+    mask = np.isnan(tmax.values)
+
+    # Convert timedelta64[ns] to float
+    tmax = tmax.astype(float)
+
+    # Mask out the NaT values
+    tmax = tmax.where(~mask, np.nan)
+
+    # Convert nanoseconds to hours
+    tmax = tmax / (3.6 * 10 ** 12)
+
+    # Subset the data futher with a minimum time threshold of interest
+    tmax = xr.where(tmax >= time_min_hr, tmax, np.nan)
+
+    return tmax
+
+
+def apply_mask(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
+    da_masked = da.where(mask == 0.0)
+    return da_masked
 
 
 class DataPaths:
@@ -374,4 +403,175 @@ NCEP_DataPaths = DataPaths(
     wind_dir=Path(r'.\wind\02_CLE15_WindOutput_Gridded'),
     precip_dir=Path(r'.\rain\03_TCR_RainOutput_Gridded_hourly')
 )
+
+
+class TCFloodHazard:
+    def __init__(
+            self: Self,
+            tc_root: Path = None,
+            tracks: str = None,
+            tc_index: int = None,
+            sfincs_mod: SfincsModel = None,
+    ):
+        self.tc_root = tc_root
+        self.tracks = tracks
+        self.tc_index = tc_index
+        self.sfincs_mod = sfincs_mod
+
+        self.tc_name = f'TC_{str(tc_index).zfill(4)}'
+
+        self.input_dir = Path(os.path.join(self.tc_root, 'sfincs_bc_inputs'))
+        self.output_dir = Path(os.path.join(self.tc_root, 'sfincs_outputs'))
+
+        # Get the maximum outputs for the variables of interest
+        self.sfincs_results = self.get_sfincs_tc_results(sfincs_mod=self.sfincs_mod, tc_dir = self.tc_root)
+        self.varmax = self.process_maximum_outputs(tc_index=self.tc_index, tc_name=self.tc_name, tracks=self.tracks,
+                                                    sfincs_results=self.sfincs_results)
+
+        # Get a combined data array of the water level max for each scenario and the difference in
+        # maximum water levels between compound and max individual
+        self.da_zsmax, self.zsmax_diff = self.calc_diff_in_zsmax_compound_minus_max_individual(da_dict=self.varmax)
+
+        # Attribute the peak water level in each cell to runoff, coastal, or compound processes using hmin threshold
+        self.da_classified = self.classify_zsmax_by_process(da=self.da_zsmax, da_diff=self.zsmax_diff, hmin = 0.1)
+
+        self.da_extents = self.get_binary_flood_extents(da_classified=self.da_classified)
+        self.flooded_area_table = self.calculate_flooded_area_by_process(da=self.da_classified, tc_index=self.tc_index)
+
+
+    @staticmethod
+    def get_sfincs_tc_results(sfincs_mod: SfincsModel, tc_dir: Path) -> dict:
+        results = {}
+        scenarios = ['compound', 'runoff', 'coastal']
+        for scenario in scenarios:
+            # Read the SFINCS model config file and outputs
+            sfincs_mod.read_config(os.path.join(tc_dir, scenario, 'sfincs.inp'))
+            sfincs_mod.read_results(
+                fn_map=os.path.join(tc_dir, scenario, 'sfincs_map.nc'),
+                fn_his=os.path.join(tc_dir, scenario, 'sfincs_his.nc'),
+                decode_times=False)
+            res = sfincs_mod.results.copy()
+            results[scenario] = res
+        return results
+
+
+    @staticmethod
+    def process_maximum_outputs(tc_index: int, tc_name: str, tracks: str,sfincs_results: dict) -> dict:
+        variables = ['zsmax', 'vmax', 'tmax']
+        tc_dict = {}
+        for scenario in sfincs_results.keys():
+            ds = sfincs_results[scenario]
+            scen_dict = {}
+            for var in variables:
+                da = ds[var].max(dim='timemax')
+                if var == 'tmax':
+                    da = process_tmax_in_hours(tmax = da, time_min_hr = 0)
+                da = da.assign_attrs(variable = var, scenario=scenario,
+                                     tc_index=tc_index, tc_name=tc_name, tracks=tracks)
+                scen_dict[var] = da
+            tc_dict[scenario] = scen_dict
+        return tc_dict
+
+
+    @staticmethod
+    def calc_diff_in_zsmax_compound_minus_max_individual(da_dict: dict) -> [xr.DataArray, xr.DataArray]:
+        da = xr.concat(objs=[da_dict['compound']['zsmax'],
+                             da_dict['runoff']['zsmax'],
+                             da_dict['coastal']['zsmax']],
+                       dim='scenario')
+        da['scenario'] = xr.IndexVariable(dims='scenario', data=['compound', 'runoff','coastal'])
+
+        # Outputs a data array of the diff in water level compound minus max. single driver
+        # Calculate the max water level at each cell across the coastal and runoff drivers
+        da_single_max = da.sel(scenario=['runoff', 'coastal']).max('scenario')
+
+        # Calculate the difference between the max water level of the compound and the max of the individual drivers
+        da_diff = (da.sel(scenario='compound') - da_single_max).compute()
+        da_diff.name = 'diff in waterlevel compound minus max. single driver'
+        da_diff.attrs = da_dict['compound']['zsmax'].attrs
+
+        return da, da_diff
+
+
+    @staticmethod
+    def classify_zsmax_by_process(da: xr.DataArray, da_diff: xr.DataArray, hmin: float=0.05) -> xr.DataArray:
+        # Outputs a data array with the zsmax attributed to processes (codes 0 to 4)
+        # Create masks based on the driver that caused the max water level given a depth threshold hmin
+        compound_mask = da_diff > hmin
+        coastal_mask = da.sel(scenario='coastal').fillna(0) > da.sel(scenario=['runoff']).fillna(0).max('scenario')
+        runoff_mask = da.sel(scenario='runoff').fillna(0) > da.sel(scenario=['coastal']).fillna(0).max('scenario')
+        assert ~np.logical_and(runoff_mask, coastal_mask).any()
+        da_classified = (xr.where(coastal_mask, x=compound_mask + 1, y=0)
+                         + xr.where(runoff_mask, x=compound_mask + 3, y=0)).compute()
+
+        da_classified.name = 'zsmax process attribution'
+        da_classified = da_classified.assign_attrs(hmin=hmin,
+                                                   no_class=0, coast_class=1, coast_compound_class=2,
+                                                   runoff_class=3, runoff_compound_class=4)
+        return da_classified
+
+
+    @staticmethod
+    def get_binary_flood_extents(da_classified: xr.DataArray) -> xr.DataArray:
+        # Compound
+        mask = ((da_classified == 2) | (da_classified == 4))
+        compound_extent = xr.where(da_classified.where(mask), x=1, y=0)
+        compound_extent.name = 'compound flood extent'
+
+        # Runoff
+        mask = (da_classified == 3)
+        runoff_extent = xr.where(da_classified.where(mask), x=1, y=0)
+        runoff_extent.name = 'runoff flood extent'
+
+        # Coastal
+        mask = (da_classified == 1)
+        coastal_extent = xr.where(da_classified.where(mask), x=1, y=0)
+        coastal_extent.name = 'coastal flood extent'
+
+        da = xr.concat(objs=[compound_extent, runoff_extent, coastal_extent], dim='scenario')
+        da['scenario'] = xr.IndexVariable(dims='scenario', data=['compound', 'runoff','coastal'])
+
+        return da
+
+
+    @staticmethod
+    def calculate_flooded_area_by_process(da: xr.DataArray, tc_index: int):
+        unique_codes, cell_counts = np.unique(da.data, return_counts=True)
+        fld_area = cell_counts.copy()
+        res = 200  # grid cell resolution in meters
+        fld_area = fld_area * (res * res) / (1000 ** 2)  # square km
+
+        # Cleanup the dataframe
+        fld_area = pd.DataFrame(fld_area).T
+        fld_area.columns = ['None', 'Coastal','Coastal-Compound','Runoff','Runoff-Compound']
+        fld_area['Total_Area'] = fld_area.sum(axis=1) # calculate the total area of flooding
+        fld_area['Compound'] = fld_area['Coastal-Compound'] + fld_area['Runoff-Compound']
+        fld_area['Total_Flooded'] = fld_area[['Coastal', 'Runoff', 'Compound']].sum(axis=1)
+        fld_area['tc_index'] = tc_index
+        fld_area.set_index('tc_index', inplace=True, drop=True)
+
+        return fld_area
+
+# Only run this once
+# sfincs_mod = SfincsModel(root=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\sfincs_initcond_mod', mode='r')
+# sfincs_mod.read()
+# mask = xr.open_dataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\waterbody_mask.nc')
+#
+
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS')
+root = Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\completed_runs')
+counter = 0
+
+mdf = pd.DataFrame()
+while counter < 100:
+    for d in os.listdir(root):
+        tc_index = int(d.split('_')[-1])
+        tc_root = os.path.join(root, d)
+        tc = TCFloodHazard(tc_root=Path(tc_root), sfincs_mod = sfincs_mod, tc_index=tc_index, tracks='NCEP')
+        mdf = pd.concat(objs=[mdf, tc.flooded_area_table], axis=0, ignore_index=True)
+        print(tc_index)
+        counter += 1
+
+
+
 

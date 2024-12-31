@@ -16,22 +16,26 @@ os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_Syn
 # storm_list = tc_index_list['tc_id'].tolist()
 # tc_list_by_vmax = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis\TCs_VmaxRanked_at_each_gage.csv')
 # storm_list = tc_list_by_vmax['193'].dropna().astype(int).tolist()
+# directory = r"Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\runs"
+# missing = []
+# for root, dirs, files in os.walk(directory):
+#     if files:
+#         continue
+#     elif len(files) < 6:
+#         r = root.split(os.sep)[-2]
+#         if r == 'runs':
+#             continue
+#         else:
+#             tc_index = int(r.split('_')[-1])
+#             print(f"TC {tc_index} is missing files")
+#             missing.append(tc_index)
+# storm_list = missing
 
-directory = r"Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\runs"
-missing = []
-for root, dirs, files in os.walk(directory):
-    if files:
-        continue
-    elif len(files) < 6:
-        r = root.split(os.sep)[-2]
-        if r == 'runs':
-            continue
-        else:
-            tc_index = int(r.split('_')[-1])
-            print(f"TC {tc_index} is missing files")
-            missing.append(tc_index)
-storm_list = missing
-timeout_duration=1800
+storm_list = [3150, 2209]#99, 1484, 2618, 3148, 3522, 3656, 3681, 3736, 3879, 3981,
+              #4045,4159, 4442, 4732, 4755, 4919, 4981,
+    #5008, 5017, 5018]
+
+timeout_duration=300
 failed = []
 with open(
         r"Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\runs\output.txt",
@@ -42,7 +46,7 @@ with open(
         if os.path.exists(track_dir) is False:
             os.makedirs(track_dir)
         files = os.listdir(track_dir)
-        if len(files) == 0:
+        if len(files) < 6:
             print(f'Working on {tc_index}')
             try:
                 subprocess.run(['python', r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\syntheticTCs_cmpdfld\sfincs\model_setup\write_sfincs_track_inputs.py',
@@ -55,3 +59,6 @@ with open(
                 failed.append(tc_index)
         else:
             print(f'Already processed {tc_index}')
+
+
+

@@ -3,5 +3,5 @@
   <component name="Black">
     <option name="sdkName" value="hydromt-sfincs-v1.1.0" />
   </component>
-  <component name="ProjectRootManager" version="2" project-jdk-name="hydromt-sfincs-v1.1.0" project-jdk-type="Python SDK" />
+  <component name="ProjectRootManager" version="2" project-jdk-name="nwis_dataretrieval" project-jdk-type="Python SDK" />
 </project>

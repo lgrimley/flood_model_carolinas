@@ -146,8 +146,20 @@ gdf_fld[f'tmax_diff'] = gdf_fld[f'fut_tmax'] - gdf_fld[f'pres_tmax']
 # FLOOD PROCESS CLASSIFICATION
 # Present
 da_zsmax_class_pres = da_zsmax_class.sel(run='flor_pres')
+da_zsmax_class_pres['flor_pres'].raster.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\test.tif', nodata=0)
+
 v = da_zsmax_class_pres['flor_pres'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
 gdf_fld[f'pres_zsmax_class'] = v.transpose()
+
+# For Marissa
+da_zsmax_class_pres_MW = da_zsmax_class_pres
+da_zsmax_class_pres_MW2 = xr.where(cond=((da_zsmax_class_pres_MW == 2) | (da_zsmax_class_pres_MW == 4)),
+                                  x=5, y=da_zsmax_class_pres_MW)
+da_zsmax_class_pres_MW2 = xr.where(cond=(da_zsmax_class_pres_MW2 == 0),
+                                  x=np.nan, y=da_zsmax_class_pres_MW2)
+r = da_zsmax_class_pres_MW2['flor_pres'].raster
+r.set_crs(32617)
+r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_present_peakWL.tif', nodata=0)
 
 # FUTURE ENSEMBLE MEAN
 da_zsmax_ensmean_class = da_zsmax_ensmean_class.sel(run='flor_fut_ensmean')
@@ -157,13 +169,15 @@ gdf_fld[f'fut_zsmax_class'] = v.transpose()
 gdf_fld2 = np.round(gdf_fld, decimals=3)
 gdf_fld2.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\florence_buildings_exposed.csv')
 
+da_zsmax_class_fut_MW = da_zsmax_ensmean_class
+da_zsmax_class_fut_MW = xr.where(cond=((da_zsmax_class_fut_MW == 2) | (da_zsmax_class_fut_MW == 4)),
+                                  x=5, y=da_zsmax_class_fut_MW)
+da_zsmax_class_fut_MW = xr.where(cond=(da_zsmax_class_fut_MW == 0),
+                                  x=np.nan, y=da_zsmax_class_fut_MW)
+r = da_zsmax_class_fut_MW['flor_fut_ensmean'].raster
+r.set_crs(32617)
+r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_future_peakWL.tif', nodata=0)
 
-test = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\florence_buildings_exposed.csv', index_col=0)
-test = test.drop('geometry', axis=1)
-test2 = gpd.GeoDataFrame(test, geometry=gpd.points_from_xy(x=test['xcoords'].values, y=test['ycoords'].values, crs=32617))
-
-test2['pres_zsmax_class'][(test2['pres_zsmax_class'] == 2) | (test2['pres_zsmax_class'] == 4)] = 5
-print(np.unique(test2['pres_zsmax_class']))
 
 
 

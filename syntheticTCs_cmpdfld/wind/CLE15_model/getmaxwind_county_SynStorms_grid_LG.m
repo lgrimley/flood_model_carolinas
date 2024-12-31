@@ -9,7 +9,7 @@ for kk = 1:length(gcm)
     trackpath = fullfile('.\tracks', strcat('UScoast6_AL_', gcm{kk}, 'cal_roEst1rmEst1_trk100'));
     load(trackpath)
 
-    selected_tracks = readtable(fullfile('.\stormTide', strcat('stormTide_TCIDs_and_gageCounts_', gcm{kk}, '.csv')));
+    selected_tracks = readtable(fullfile('.\stormTide', strcat('stormTide_TCIDs_and_gageCounts_', gcm{kk}, 'cal.csv')));
 
     fig_outdir = fullfile('.\wind', strcat('figs_', gcm{kk}, 'cal'));
     nc_outdir = fullfile('.\wind', strcat('CLE15_Gridded_' ,gcm{kk}, 'cal'));

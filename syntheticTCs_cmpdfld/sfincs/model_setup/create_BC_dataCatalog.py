@@ -1,9 +1,9 @@
 import os
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\NCEP_Reanalysis')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585')
 data_lib = 'data_catalog_NCEP.yml'
 
-data_dir = r'.\rain\03_TCR_RainOutput_Gridded_hourly'
+data_dir = r'.\rain\TCR_Gridded_canesm_ssp585cal_hourly'
 with open(data_lib, mode="w+") as fcat:
     for file in os.listdir(data_dir):
         if file.endswith('.nc'):
@@ -21,6 +21,7 @@ precip_{tc_id}:
     title: Synthetic TCR rainfall
     model_ref: https://agupubs.onlinelibrary.wiley.com/doi/full/10.1002/2013GL058284
     publication_date: 2022
+    model: canesm ssp585cal
     data_ref: https://www.nature.com/articles/s41558-021-01272-7"""
 
             fcat.write(yml_str)

@@ -21,6 +21,7 @@ fld_area_fut_ensmean = cleanup_flood_area_dataframe(df)
 fld_area_fut_ensmean.drop(columns=['storm', 'climate', 'group', 'Total'], inplace=True)
 
 combined = pd.concat([fld_area_present, fld_area_fut_ensmean], axis=0)
+print(combined)
 
 # Plotting
 runs_to_plot = ['flor_pres', 'flor_fut_ensmean',

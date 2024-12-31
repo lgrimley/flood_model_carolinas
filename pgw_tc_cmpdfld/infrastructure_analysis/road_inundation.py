@@ -85,7 +85,8 @@ print(fut_evac.sum())
 
 # PLOTTING
 please_plot = True
-figname = 'pres vs. future county total road flood area - evac routes'
+cc = 'Reds'
+figname = 'pres vs. future county total road flood area - evac routes v2'
 if please_plot is True:
     fig, axs = plt.subplots(nrows=1, ncols=2, figsize=(8, 4), subplot_kw={'projection': utm}, tight_layout=True)
     axs =axs.flatten()
@@ -93,27 +94,29 @@ if please_plot is True:
     vmin = 0.1
     vmax = 1
     cs = subset.plot(ax=ax, column=pres_road.columns[1],
-                     cmap='Reds',
+                     cmap=cc,edgecolor='black', linewidth=0.05,
                      legend=False,
-                     zorder=0,
+                     zorder=1,
                      vmin=vmin, vmax=vmax)
     ax.set_title('Present')
 
     ax=axs[1]
     cs = subset.plot(ax=ax, column=fut_road.columns[1],
-                     cmap='Reds',
+                     cmap=cc, edgecolor='black', linewidth=0.05,
                      legend=False,
-                     zorder=0,
+                     zorder=1,
                      vmin=vmin, vmax=vmax)
     ax.set_title('Future')
 
     for i in range(len(axs)):
         ax =axs[i]
-        major_rivers_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=1)
-        nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=1)
-        coastal_wb_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=0.75)
-        urban_areas.plot(ax=ax, color='grey', alpha=0.7)
-        mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=1, alpha=1)
+        mod.region.plot(ax=ax, color='white', edgecolor='black', linewidth=0.05, linestyle='-', zorder=0, alpha=0.25,
+                    hatch='xxx')
+        major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.25, zorder=2, alpha=1)
+        nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.25, zorder=2, alpha=1)
+        coastal_wb_clip.plot(ax=ax, color='steelblue', edgecolor='none', linewidth=0.25, zorder=2, alpha=1)
+        urban_areas.plot(ax=ax, color='grey',  edgecolor='black', linewidth=0.25, alpha=0.8, zorder=2)
+        mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=2, alpha=1)
         tc_tracks[(tc_tracks['NAME'] == 'FLORENCE') & (tc_tracks['SEASON'] == 2018)].plot(ax=ax, color='red',
                                                                                           edgecolor='none',
                                                                                           label='Florence\nTrack',
@@ -125,9 +128,9 @@ if please_plot is True:
         ax.set_xlim(minx, maxx)
         ax.set_ylim(miny, maxy)
 
-    sm = plt.cm.ScalarMappable(cmap='Reds', norm=plt.Normalize(vmin=vmin, vmax=vmax))
+    sm = plt.cm.ScalarMappable(cmap=cc, norm=plt.Normalize(vmin=vmin, vmax=vmax))
     pos0 = axs[1].get_position()
-    cax = fig.add_axes([pos0.x1 + 0.12, pos0.y0, 0.03, pos0.height * 0.8])
+    cax = fig.add_axes([pos0.x1 + 0.12, pos0.y0, 0.02, pos0.height * 0.8])
     cbar = fig.colorbar(sm,
                         cax=cax,
                         orientation='vertical',
@@ -143,8 +146,8 @@ joined.plot(ax=ax, column='evac_area_diff', cmap='Reds', legend=True, zorder=0, 
             legend_kwds={'label':"Flooded Evacuation Road Area (sq.km.)",'orientation':"vertical"})
 major_rivers_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=1)
 nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=1)
-coastal_wb_clip.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=1, alpha=0.75)
-urban_areas.plot(ax=ax, color='grey',alpha=0.7)
+coastal_wb_clip.plot(ax=ax, color='steelblue', edgecolor='black', linewidth=0.25, zorder=1, alpha=0.5)
+urban_areas.plot(ax=ax, color='grey',edgecolor='black',alpha=0.7)
 mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=1, alpha=1)
 ax.set_title('')
 ax.set_aspect('equal')
@@ -154,6 +157,72 @@ ax.set_xlim(minx, maxx)
 ax.set_ylim(miny, maxy)
 plt.savefig('Increase in flooded evacuation road area (sq.km.).png', dpi=300, bbox_inches="tight")
 plt.close()
+
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\csvs_forroadrasters_present')
+# Present Florence
+pres_road = pd.read_csv('floodedroadareas.csv', index_col=0)
+pres_road.set_index(keys='County', drop=True, inplace=True)
+pres_road.dropna(axis=0, inplace=True)
+total_pres = pd.DataFrame(pres_road.sum(axis=0))
+total_pres.columns=['Present']
+
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\csvs_forroadrasters_future')
+# Future Florence
+fut_road = pd.read_csv('floodedroadareas.csv', index_col=0)
+fut_road.set_index(keys='County', drop=True, inplace=True)
+fut_road.dropna(axis=0, inplace=True)
+total_fut = pd.DataFrame(fut_road.sum(axis=0))
+total_fut.columns = ['Future']
+
+total = pd.concat([total_pres.T,total_fut.T], axis=0)
+total_flra = total[['coastal_flra', 'runoff_flra', 'compound_flra']]
+total_flra.columns = ['Coastal', 'Runoff', 'Compound']
+
+pie_scale = total_flra.sum(axis=1) / 70
+
+
+colors = ['#4F6272', '#B7C3F3','#DD7596', '#8EB897']
+nrow, ncol = 1, 2
+n_subplots = nrow * ncol
+first_in_row = np.arange(0, n_subplots, ncol)
+last_row = np.arange(n_subplots - ncol, n_subplots, 1)
+fig, axs = plt.subplots(nrows=nrow,
+                        ncols=ncol,
+                        figsize=(6, 6),
+                        tight_layout=True,
+                        layout='constrained'
+                        )
+axs = axs.flatten()
+for i in range(len(total_flra.index)):
+    ax = axs[i]
+    d = total_flra[total_flra.index == total_flra.index[i]]
+    ax.pie(d.to_numpy()[0],
+           colors=colors,
+           radius=pie_scale[pie_scale.index == total_flra.index[i]][0],
+           startangle=90,
+           autopct='%1.0f%%',
+           labels=total_flra.columns
+           )
+#axs[0].set_title('Present')
+#axs[1].set_title('Future')
+# legend_kwargs0 = dict(
+#     bbox_to_anchor=(0.75, 0.5),
+#     title=None,
+#     #loc="upper right",
+#     frameon=True,
+#     prop=dict(size=10),
+# )
+#axs[1].legend(labels=total_flra.columns, **legend_kwargs0)
+plt.subplots_adjust(wspace=0.0, hspace=0.05)
+plt.margins(x=-0.1, y=0)
+plt.savefig(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\road_inundation_area_pieChart.png',
+            bbox_inches='tight', dpi=300)
+plt.close()
+
+
+
+
+
 
 
 

@@ -102,3 +102,8 @@ da_tmax['run'] = xr.IndexVariable('run', event_ids)
 da_tmax.to_netcdf('pgw_tmax.nc')
 
 print('Done writing zsmax, tmax, vmax for all runs!')
+
+test = xr.open_dataset(r'C:\Users\lelise\Desktop\tmp\depth_New Hanover.tif')
+depth = test.sel(band=2)
+depth = depth['band_data'].where(depth['band_data']>0.1)
+depth.raster.to_raster(r'C:\Users\lelise\Desktop\tmp\depth_NewHanover_2.tif', nodata=-9999.0)

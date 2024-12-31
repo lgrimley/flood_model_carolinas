@@ -14,58 +14,39 @@ mod = SfincsModel(root=base_root, mode='r')
 mod.read()
 
 
-run_dir=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\completed_runs'
-zsmax_runoff = []
-tc_runoff = []
-zsmax_coastal = []
-tc_coastal = []
-zsmax_da = []
-tc_da = []
+run_dir=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\completed_runs\TC_2645\coastal'
+mod.read_config(os.path.join(run_dir, 'sfincs.inp'))
+mod.read_results(fn_map=os.path.join(run_dir, 'sfincs_map.nc'),
+                 fn_his=os.path.join(run_dir, 'sfincs_his.nc'),
+                 decode_times=False)
+zsmax = mod.results['zsmax'].max(dim='timemax')
+zsmax.raster.to_raster('coastal_2645.tif', nodata=-999.0)
 
-problem = []
-for tc_name in os.listdir(run_dir):
-    if tc_name == 'python_output_file.txt':
-        continue
-    else:
-        tc_index = int(tc_name.split('_')[-1])
-        print(tc_index)
-        scenarios = ['runoff', 'coastal', 'compound']
-        tc_dir = os.path.join(run_dir, tc_name)
-        for scen in scenarios:
-            scen_dir = os.path.join(tc_dir, scen)
-            try:
-                mod.read_config(os.path.join(scen_dir, 'sfincs.inp'))
-                mod.read_results(fn_map=os.path.join(scen_dir, 'sfincs_map.nc'),
-                                 fn_his=os.path.join(scen_dir, 'sfincs_his.nc'),
-                                 decode_times=False)
-                zsmax = mod.results['zsmax'].max(dim='timemax')
-                zsmax = zsmax.assign_attrs(scenario = scen, tc_index = tc_index,
-                                           tc_name = tc_name, climate = 'NCEP 1980-2005')
-                if scen == 'runoff':
-                    zsmax_runoff.append(zsmax)
-                    tc_runoff.append(tc_index)
-                elif scen == 'coastal':
-                    zsmax_coastal.append(zsmax)
-                    tc_coastal.append(tc_index)
-                else:
-                    zsmax_da.append(zsmax)
-                    tc_da.append(tc_index)
-            except:
-                print(f'Skipping {tc_index} {scen}')
-                problem.append([tc_index, scen])
-                pass
+# zsmax_da2 = xr.concat(zsmax_da, dim='tc_index')
+# zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_da)
+# zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax.nc')
+#
+# zsmax_da2 = xr.concat(zsmax_runoff, dim='tc_index')
+# zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_runoff)
+# zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax_runoff.nc')
+#
+# zsmax_da2 = xr.concat(zsmax_coastal, dim='tc_index')
+# zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_coastal)
+# zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax_coastal.nc')
 
-zsmax_da2 = xr.concat(zsmax_da, dim='tc_index')
-zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_da)
-zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax.nc')
-
-zsmax_da2 = xr.concat(zsmax_runoff, dim='tc_index')
-zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_runoff)
-zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax_runoff.nc')
-
-zsmax_da2 = xr.concat(zsmax_coastal, dim='tc_index')
-zsmax_da2['tc_index'] = xr.IndexVariable('tc_index', tc_coastal)
-zsmax_da2.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\NCEP\zsmax_coastal.nc')
+# s = [x[0] for x in problem]
+#
+#
+# tc_index_to_redo = []
+# for d in os.listdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\runs'):
+#     tc_index = int(d.split('_')[-1])
+#     tc_index_to_redo.append(tc_index)
+#
+# tc_index_to_redo = tc_index_to_redo + s
+# df = pd.DataFrame(tc_index_to_redo)
+# df.columns=['tc_id']
+# df.drop_duplicates(inplace=True)
+# df.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\runs_remaining.csv')
 
 
 # rivers=['Tar', 'Grindle', 'BriceCreek', 'Swift','Contentnea', 'New_',
