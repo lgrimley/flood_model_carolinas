@@ -1,7 +1,7 @@
 import os
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585')
-data_lib = 'data_catalog_NCEP.yml'
+data_lib = 'data_catalog_canesm_ssp585.yml'
 
 data_dir = r'.\rain\TCR_Gridded_canesm_ssp585cal_hourly'
 with open(data_lib, mode="w+") as fcat:
@@ -27,7 +27,7 @@ precip_{tc_id}:
             fcat.write(yml_str)
 
 
-data_dir = r'.\wind\02_CLE15_WindOutput_Gridded'
+data_dir = r'.\wind\CLE15_ReGridded_canesm_ssp585cal'
 with open(data_lib, mode="a") as fcat:
     for file in os.listdir(data_dir):
         if file.endswith('.nc'):
@@ -50,7 +50,7 @@ wind_{tc_id}:
             fcat.write(yml_str)
 
 
-data_dir = r'.\stormTide\adcirc_waterlevel_netcdf'
+data_dir = r'.\stormTide\adcirc_waterlevel_netcdf_canesm_ssp585'
 with open(data_lib, mode="a") as fcat:
     for file in os.listdir(data_dir):
         if file.endswith('.nc'):
@@ -74,7 +74,7 @@ stormTide_{tc_id}:
 
 
 data_dir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\EDSReanalysis_data'
-file = 'EDSReanalysis_V2_1992_2022.nc'
+file = 'EDSReanalysis_V2_1992_2022_with90yrOffset.nc'
 with open(data_lib, mode="a") as fcat:
     yml_str = f"""
 tide_reanalysis:
@@ -86,7 +86,7 @@ tide_reanalysis:
     category: waterlevel
     units: m+MSL
     description: https://github.com/RENCI/EDSReanalysis
-    title: ADCIRC tide reanalysis V2
+    title: ADCIRC tide reanalysis V2 with +90yr offset
     model_ref: ADCIRC
     publication_date: 2024
     data_ref: https://renci.github.io/edsreanalysisdoc/"""

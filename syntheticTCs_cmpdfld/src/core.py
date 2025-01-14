@@ -6,103 +6,16 @@ import pandas as pd
 import geopandas as gpd
 import xarray as xr
 import scipy.io as sio
-from pyexpat.errors import XML_ERROR_RESERVED_PREFIX_XML
 from shapely.geometry import LineString
 from pathlib import Path
 from typing import Self
-import sys
 from hydromt_sfincs import SfincsModel
-
-
-def find_nearest_non_nan_index(df, col_name, index):
-    """Finds the nearest non-NaN index value in the specified column.
-
-    Args:
-        df (pd.DataFrame): The DataFrame.
-        col_name (str): The name of the column to search in.
-        index (int): The index value from which to search.
-
-    Returns:
-        int: The index of the nearest non-NaN value, or None if no such value exists.
-    """
-
-    # Get the non-NaN indices in the column
-    non_nan_indices = df[col_name].dropna().index
-
-    # Find the nearest non-NaN index
-    if non_nan_indices.empty:
-        return None  # No non-NaN values in the column
-    else:
-        return non_nan_indices[np.abs(non_nan_indices - index).argmin()]
-
-
-def calculate_station_highTide_time(da: xr.Dataset,
-                                    tref: pd.DatetimeIndex,
-                                    station_names: list = None) -> pd.DataFrame:
-    if station_names is None:
-        station_names = da.index.values
-
-    highTide_times = []
-    sta_keep = []
-    for station in station_names:
-        # Get the high tide time lag of the ADCIRC Storm Tide gages
-        data = da.sel(index=station).sel(time=slice(tref, tref + pd.to_timedelta('12h')))
-        df = data.to_dataframe()
-
-        df['delta_waterlevel'] = df['waterlevel'].diff()  # Calculate the difference in water levels across time
-        increasing_trend = df[df['delta_waterlevel'] > 0]  # Identify where water level is increasing
-        try:
-            if len(increasing_trend) > 0:
-                ind = np.argmax(increasing_trend['waterlevel'])
-                station_highTide_time = increasing_trend.index[ind]
-            else:
-                ind = np.argmax(df['waterlevel'])
-                station_highTide_time = df.index[ind]
-            highTide_times.append(station_highTide_time)
-            sta_keep.append(station)
-        except:
-            print(f"Issue with {station}")
-            pass
-
-    highTide_df = pd.DataFrame()
-    highTide_df['station'] = sta_keep
-    highTide_df['highTide_time'] = highTide_times
-    highTide_df.set_index(keys='station', drop=True, inplace=True)
-    return highTide_df
-
-def process_tmax_in_hours(tmax: xr.DataArray, time_min_hr: int = 0) -> xr.DataArray:
-    # Get the time of inundation above twet_threshold
-    #tmax = da['tmax'].max(dim='timemax')
-
-    # Create a mask of the NaT values
-    #mask = np.isnat(tmax.values)
-    mask = np.isnan(tmax.values)
-
-    # Convert timedelta64[ns] to float
-    tmax = tmax.astype(float)
-
-    # Mask out the NaT values
-    tmax = tmax.where(~mask, np.nan)
-
-    # Convert nanoseconds to hours
-    tmax = tmax / (3.6 * 10 ** 12)
-
-    # Subset the data futher with a minimum time threshold of interest
-    tmax = xr.where(tmax >= time_min_hr, tmax, np.nan)
-
-    return tmax
-
-
-def apply_mask(da: xr.DataArray, mask: xr.DataArray) -> xr.DataArray:
-    da_masked = da.where(mask == 0.0)
-    return da_masked
+from src.utils import process_tmax_in_hours, calculate_station_highTide_time
 
 
 class DataPaths:
     adcirc_reanalysis_locs_filepath = Path(
         r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\full_data_meta.csv')
-    adcirc_reanalysis_data_filepath = Path(
-        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\EDSReanalysis_V2_1992_2022.nc')
     adcirc_stormTide_locs_filepath = Path(
         r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
     adcirc_loc_mapping_filepath = Path(
@@ -114,8 +27,10 @@ class DataPaths:
             tracks_filepath: Path = None,
             adcirc_stormTide_dir: Path = None,
             wind_dir: Path = None,
-            precip_dir: Path = None
+            precip_dir: Path = None,
+            adcirc_reanalysis_data_filepath: Path = None,
     ):
+        self.adcirc_reanalysis_data_filepath = adcirc_reanalysis_data_filepath
         self.root = root
         self.tracks_filepath = os.path.join(self.root, tracks_filepath)
         self.adcirc_stormTide_dir = os.path.join(self.root, adcirc_stormTide_dir)
@@ -144,17 +59,19 @@ class SyntheticTrack:
                                                                     tc_index=tc_index)
             self.track_time = self.get_track_time(track_information=self.track_information)
             print('Track information loaded from mat file.')
-        except:
+        except Exception as e:
             print('Issue reading track information from mat file.')
-            breakpoint()
+            print(e)
+            #breakpoint()
 
         try:
             self.stormTide = self.DatCat.get_geodataset(data_like=f'stormTide_{self.tc_index_padded}')
             self.adcirc_time = self.get_stormTide_time(stormTide=self.stormTide)
             print('Stormtide data loaded from Hydromt Datacatalog.')
-        except:
+        except Exception as e:
             print('Issue reading stormtide netcdf.')
-            breakpoint()
+            print(e)
+            #breakpoint()
 
         tmin = min(self.track_time[0], self.adcirc_time[0])
         tmax = max(self.track_time[1], self.adcirc_time[1]) + pd.to_timedelta('5d')
@@ -396,15 +313,6 @@ class SyntheticTrack:
         return stormTide
 
 
-NCEP_DataPaths = DataPaths(
-    root=Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis'),
-    tracks_filepath=Path(r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'),
-    adcirc_stormTide_dir=Path(r'.\stormTide\adcirc_waterlevel_netcdf'),
-    wind_dir=Path(r'.\wind\02_CLE15_WindOutput_Gridded'),
-    precip_dir=Path(r'.\rain\03_TCR_RainOutput_Gridded_hourly')
-)
-
-
 class TCFloodHazard:
     def __init__(
             self: Self,
@@ -412,32 +320,40 @@ class TCFloodHazard:
             tracks: str = None,
             tc_index: int = None,
             sfincs_mod: SfincsModel = None,
+            zsmax_threshold: float = None,
     ):
         self.tc_root = tc_root
         self.tracks = tracks
         self.tc_index = tc_index
         self.sfincs_mod = sfincs_mod
-
         self.tc_name = f'TC_{str(tc_index).zfill(4)}'
-
         self.input_dir = Path(os.path.join(self.tc_root, 'sfincs_bc_inputs'))
         self.output_dir = Path(os.path.join(self.tc_root, 'sfincs_outputs'))
+        self.zsmax_threshold = zsmax_threshold
+        self.watermask = sfincs_mod.data_catalog.get_rasterdataset(
+            r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\waterbody_mask.nc')
+
+        try:
+            self.sfincs_results = self.get_sfincs_tc_results(sfincs_mod=self.sfincs_mod, tc_dir = self.tc_root)
+        except Exception as e:
+            print(e)
+            breakpoint()
 
         # Get the maximum outputs for the variables of interest
-        self.sfincs_results = self.get_sfincs_tc_results(sfincs_mod=self.sfincs_mod, tc_dir = self.tc_root)
         self.varmax = self.process_maximum_outputs(tc_index=self.tc_index, tc_name=self.tc_name, tracks=self.tracks,
-                                                    sfincs_results=self.sfincs_results)
+                                                    sfincs_results=self.sfincs_results, watermask=self.watermask)
 
         # Get a combined data array of the water level max for each scenario and the difference in
         # maximum water levels between compound and max individual
         self.da_zsmax, self.zsmax_diff = self.calc_diff_in_zsmax_compound_minus_max_individual(da_dict=self.varmax)
 
         # Attribute the peak water level in each cell to runoff, coastal, or compound processes using hmin threshold
-        self.da_classified = self.classify_zsmax_by_process(da=self.da_zsmax, da_diff=self.zsmax_diff, hmin = 0.1)
+        self.da_classified = self.classify_zsmax_by_process(da=self.da_zsmax, da_diff=self.zsmax_diff,
+                                                            hmin = self.zsmax_threshold)
 
         self.da_extents = self.get_binary_flood_extents(da_classified=self.da_classified)
-        self.flooded_area_table = self.calculate_flooded_area_by_process(da=self.da_classified, tc_index=self.tc_index)
-
+        #self.flooded_area_table = self.calculate_flooded_area_by_process(da=self.da_classified, tc_index=self.tc_index)
+        self.precip, self.wind = self.process_bc_inputs(input_dir=self.input_dir)
 
     @staticmethod
     def get_sfincs_tc_results(sfincs_mod: SfincsModel, tc_dir: Path) -> dict:
@@ -454,24 +370,24 @@ class TCFloodHazard:
             results[scenario] = res
         return results
 
-
     @staticmethod
-    def process_maximum_outputs(tc_index: int, tc_name: str, tracks: str,sfincs_results: dict) -> dict:
+    def process_maximum_outputs(tc_index: int, tc_name: str, tracks: str,
+                                sfincs_results: dict, watermask: xr.DataArray) -> dict:
         variables = ['zsmax', 'vmax', 'tmax']
-        tc_dict = {}
+        da_dict = {}
         for scenario in sfincs_results.keys():
             ds = sfincs_results[scenario]
             scen_dict = {}
             for var in variables:
                 da = ds[var].max(dim='timemax')
+                da = da.where(watermask == 0.0)
                 if var == 'tmax':
                     da = process_tmax_in_hours(tmax = da, time_min_hr = 0)
                 da = da.assign_attrs(variable = var, scenario=scenario,
                                      tc_index=tc_index, tc_name=tc_name, tracks=tracks)
                 scen_dict[var] = da
-            tc_dict[scenario] = scen_dict
-        return tc_dict
-
+            da_dict[scenario] = scen_dict
+        return da_dict
 
     @staticmethod
     def calc_diff_in_zsmax_compound_minus_max_individual(da_dict: dict) -> [xr.DataArray, xr.DataArray]:
@@ -492,9 +408,8 @@ class TCFloodHazard:
 
         return da, da_diff
 
-
     @staticmethod
-    def classify_zsmax_by_process(da: xr.DataArray, da_diff: xr.DataArray, hmin: float=0.05) -> xr.DataArray:
+    def classify_zsmax_by_process(da: xr.DataArray, da_diff: xr.DataArray, hmin: float=0.1) -> xr.DataArray:
         # Outputs a data array with the zsmax attributed to processes (codes 0 to 4)
         # Create masks based on the driver that caused the max water level given a depth threshold hmin
         compound_mask = da_diff > hmin
@@ -504,74 +419,81 @@ class TCFloodHazard:
         da_classified = (xr.where(coastal_mask, x=compound_mask + 1, y=0)
                          + xr.where(runoff_mask, x=compound_mask + 3, y=0)).compute()
 
-        da_classified.name = 'zsmax process attribution'
+        da_classified.name = 'zsmax_attribution'
         da_classified = da_classified.assign_attrs(hmin=hmin,
                                                    no_class=0, coast_class=1, coast_compound_class=2,
                                                    runoff_class=3, runoff_compound_class=4)
         return da_classified
-
 
     @staticmethod
     def get_binary_flood_extents(da_classified: xr.DataArray) -> xr.DataArray:
         # Compound
         mask = ((da_classified == 2) | (da_classified == 4))
         compound_extent = xr.where(da_classified.where(mask), x=1, y=0)
-        compound_extent.name = 'compound flood extent'
+        compound_extent.name = 'compound_flood_extent'
 
         # Runoff
         mask = (da_classified == 3)
         runoff_extent = xr.where(da_classified.where(mask), x=1, y=0)
-        runoff_extent.name = 'runoff flood extent'
+        runoff_extent.name = 'runoff_flood_extent'
 
         # Coastal
         mask = (da_classified == 1)
         coastal_extent = xr.where(da_classified.where(mask), x=1, y=0)
-        coastal_extent.name = 'coastal flood extent'
+        coastal_extent.name = 'coastal_flood_extent'
 
-        da = xr.concat(objs=[compound_extent, runoff_extent, coastal_extent], dim='scenario')
-        da['scenario'] = xr.IndexVariable(dims='scenario', data=['compound', 'runoff','coastal'])
+        # Combined
+        mask = (da_classified == 1)
+        total_extent = xr.where(da_classified > 0, x=1, y=0)
+        total_extent.name = 'total_flood_extent'
+
+        da = xr.concat(objs=[compound_extent, runoff_extent, coastal_extent, total_extent], dim='scenario')
+        da['scenario'] = xr.IndexVariable(dims='scenario', data=['compound', 'runoff','coastal', 'total'])
 
         return da
 
-
     @staticmethod
-    def calculate_flooded_area_by_process(da: xr.DataArray, tc_index: int):
-        unique_codes, cell_counts = np.unique(da.data, return_counts=True)
-        fld_area = cell_counts.copy()
-        res = 200  # grid cell resolution in meters
-        fld_area = fld_area * (res * res) / (1000 ** 2)  # square km
+    def process_bc_inputs(input_dir: Path=None) -> [xr.DataArray, xr.DataArray]:
 
-        # Cleanup the dataframe
-        fld_area = pd.DataFrame(fld_area).T
-        fld_area.columns = ['None', 'Coastal','Coastal-Compound','Runoff','Runoff-Compound']
-        fld_area['Total_Area'] = fld_area.sum(axis=1) # calculate the total area of flooding
-        fld_area['Compound'] = fld_area['Coastal-Compound'] + fld_area['Runoff-Compound']
-        fld_area['Total_Flooded'] = fld_area[['Coastal', 'Runoff', 'Compound']].sum(axis=1)
-        fld_area['tc_index'] = tc_index
-        fld_area.set_index('tc_index', inplace=True, drop=True)
+        bc = 'precip_2d'
+        data = xr.open_dataset(os.path.join(input_dir, f'{bc}.nc'))
+        total = data.sum(dim='time')['Precipitation']
+        mean_rate = data.mean(dim='time')['Precipitation']
+        max_rate = data.max(dim='time')['Precipitation']
+        da_ls = [total, mean_rate, max_rate]
+        da_precip = xr.concat(objs=da_ls, dim='name')
+        da_precip['name'] = xr.IndexVariable(dims='name', data=['total', 'mean', 'max'])
 
-        return fld_area
+        bc = 'wind_2d'
+        data = xr.open_dataset(os.path.join(input_dir, f'{bc}.nc'))
+        windspeed = np.sqrt((data['eastward_wind']**2) + (data['northward_wind']**2))
+        windspeed.name = 'windspeed'
+        mean_rate = windspeed.mean(dim='time')
+        max_rate = windspeed.max(dim='time')
+        da_ls = [mean_rate, max_rate]
+        da_wind = xr.concat(objs=da_ls, dim='name')
+        da_wind['name'] = xr.IndexVariable(dims='name', data=['mean', 'max'])
 
-# Only run this once
-# sfincs_mod = SfincsModel(root=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\sfincs_initcond_mod', mode='r')
-# sfincs_mod.read()
-# mask = xr.open_dataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\waterbody_mask.nc')
-#
-
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS')
-root = Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\completed_runs')
-counter = 0
-
-mdf = pd.DataFrame()
-while counter < 100:
-    for d in os.listdir(root):
-        tc_index = int(d.split('_')[-1])
-        tc_root = os.path.join(root, d)
-        tc = TCFloodHazard(tc_root=Path(tc_root), sfincs_mod = sfincs_mod, tc_index=tc_index, tracks='NCEP')
-        mdf = pd.concat(objs=[mdf, tc.flooded_area_table], axis=0, ignore_index=True)
-        print(tc_index)
-        counter += 1
+        return [da_precip, da_wind]
 
 
 
+NCEP_DataPaths = DataPaths(
+    root=Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis'),
+    tracks_filepath=Path(r'.\tracks\UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'),
+    adcirc_stormTide_dir=Path(r'.\stormTide\adcirc_waterlevel_netcdf'),
+    wind_dir=Path(r'.\wind\02_CLE15_WindOutput_Gridded'),
+    precip_dir=Path(r'.\rain\03_TCR_RainOutput_Gridded_hourly'),
+    adcirc_reanalysis_data_filepath = Path(
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\EDSReanalysis_V2_1992_2022.nc')
+)
 
+cansem_ssp585_DataPaths = DataPaths(
+    root=Path(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585'),
+    tracks_filepath=Path(r'.\tracks\UScoast6_AL_canesm_ssp585cal_roEst1rmEst1_trk100.mat'),
+    adcirc_stormTide_dir=Path(r'.\stormTide\adcirc_waterlevel_netcdf_canesm_ssp585'),
+    wind_dir=Path(r'.\wind\CLE15_ReGridded_canesm_ssp585cal'),
+    precip_dir=Path(r'.\rain\TCR_Gridded_canesm_ssp585cal_hourly'),
+    adcirc_reanalysis_data_filepath = Path(
+        r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis\EDSReanalysis_V2_1992_2022_with90yrOffset.nc')
+)

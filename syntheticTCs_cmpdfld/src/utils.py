@@ -144,3 +144,144 @@ def get_TCs_Vmax(tc_ids, inputdir, outputdir):
     return da
 
 
+def find_nearest_non_nan_index(df, col_name, index):
+    """Finds the nearest non-NaN index value in the specified column.
+
+    Args:
+        df (pd.DataFrame): The DataFrame.
+        col_name (str): The name of the column to search in.
+        index (int): The index value from which to search.
+
+    Returns:
+        int: The index of the nearest non-NaN value, or None if no such value exists.
+    """
+
+    # Get the non-NaN indices in the column
+    non_nan_indices = df[col_name].dropna().index
+
+    # Find the nearest non-NaN index
+    if non_nan_indices.empty:
+        return None  # No non-NaN values in the column
+    else:
+        return non_nan_indices[np.abs(non_nan_indices - index).argmin()]
+
+
+def calculate_station_highTide_time(da: xr.Dataset,
+                                    tref: pd.DatetimeIndex,
+                                    station_names: list = None) -> pd.DataFrame:
+    if station_names is None:
+        station_names = da.index.values
+
+    highTide_times = []
+    sta_keep = []
+    for station in station_names:
+        # Get the high tide time lag of the ADCIRC Storm Tide gages
+        # Select the first 12 hours of the data to search
+        data = da.sel(index=station).sel(time=slice(tref, tref + pd.to_timedelta('12h')))
+        df = data.to_dataframe()
+
+        df['delta_waterlevel'] = df['waterlevel'].diff()  # Calculate the difference in water levels across the 12 hours
+        increasing_trend = df[df['delta_waterlevel'] > 0]
+        try:
+            if len(increasing_trend) > 0:
+                # Subset to where water level is increasing (e.g., rising tide)
+                # Pick the datetime of the max water level in the 12 hours window
+                ind = np.argmax(increasing_trend['waterlevel'])
+                station_highTide_time = increasing_trend.index[ind]
+            else:
+                # Otherwise just pick the datetime of the max water level in the 12 hours window
+                ind = np.argmax(df['waterlevel'])
+                station_highTide_time = df.index[ind]
+            highTide_times.append(station_highTide_time)
+            sta_keep.append(station)
+        except:
+            print(f"Issue with {station}")
+            pass
+
+    highTide_df = pd.DataFrame()
+    highTide_df['station'] = sta_keep
+    highTide_df['highTide_time'] = highTide_times
+    highTide_df.set_index(keys='station', drop=True, inplace=True)
+    return highTide_df
+
+
+def process_tmax_in_hours(tmax: xr.DataArray, time_min_hr: int = 0) -> xr.DataArray:
+    # Get the time of inundation above twet_threshold
+    #tmax = da['tmax'].max(dim='timemax')
+
+    # Create a mask of the NaT values
+    #mask = np.isnat(tmax.values)
+    mask = np.isnan(tmax.values)
+
+    # Convert timedelta64[ns] to float
+    tmax = tmax.astype(float)
+
+    # Mask out the NaT values
+    tmax = tmax.where(~mask, np.nan)
+
+    # Convert nanoseconds to hours
+    tmax = tmax / (3.6 * 10 ** 12)
+
+    # Subset the data futher with a minimum time threshold of interest
+    tmax = xr.where(tmax >= time_min_hr, tmax, np.nan)
+
+    return tmax
+
+
+def calculate_flooded_area_by_process(da: xr.DataArray, tc_index: int):
+    unique_codes, cell_counts = np.unique(da.data, return_counts=True)
+    fld_area1 = cell_counts.copy()
+    res = 200  # grid cell resolution in meters
+    fld_area1 = fld_area1 * (res * res) / (1000 ** 2)  # square km
+
+    # Cleanup the dataframe
+    fld_area1 = pd.DataFrame(fld_area1).T
+    fld_area1.columns = unique_codes
+    expected = pd.DataFrame(columns=[0.0, 1.0, 2.0, 3.0, 4.0, np.NAN])
+    fld_area = pd.concat(objs=[expected, fld_area1], axis=0, ignore_index=True)
+
+    fld_area.columns = ['NoFlood', 'Coastal', 'Coastal-Compound', 'Runoff', 'Runoff-Compound', 'Inactive']
+    fld_area['Total_Area'] = fld_area.sum(axis=1)  # calculate the total area of flooding
+    fld_area['Compound'] = fld_area['Coastal-Compound'] + fld_area['Runoff-Compound']
+    fld_area['Total_Flooded'] = fld_area[['Coastal', 'Runoff', 'Compound']].sum(axis=1)
+    fld_area['tc_index'] = tc_index
+    fld_area.set_index('tc_index', inplace=True, drop=True)
+
+    return fld_area
+
+
+def get_landfall_info(tc_df, gage_locs, clip_gdf):
+    tc_gdf = gpd.GeoDataFrame(tc_df, geometry=gpd.points_from_xy(x=tc_df['lon100'], y=tc_df['lat100'], crs=4326))
+    tc_gdf = tc_gdf.clip(clip_gdf)
+    gage_locs_gdf = gpd.GeoDataFrame(gage_locs,
+                                     geometry=gpd.points_from_xy(x=gage_locs['x'], y=gage_locs['y'], crs=4326))
+
+    # Create an empty list to store the results
+    min_distances = []
+
+    # Loop through each point in df1
+    for i, point1 in tc_gdf.iterrows():
+        # Calculate the distance from the current point in df1 to all points in df2
+        distances = gage_locs_gdf.geometry.apply(lambda point2: point1.geometry.distance(point2))
+
+        # Find the smallest distance and the corresponding point from df2
+        min_distance = np.round(distances.min(), 5)
+        closest_point = gage_locs_gdf.loc[distances.idxmin()]
+
+        # Store the result for the current point in df1
+        min_distances.append((i, min_distance, closest_point['gage_id']))
+
+    # Create a DataFrame with the results
+    result_df = gpd.GeoDataFrame(min_distances, columns=["Index_in_df1", "Min_Distance", "Closest_Point_in_df2"])
+
+    lf_idx = result_df.loc[result_df['Min_Distance'].idxmin()]
+    landfall_info = tc_gdf[tc_gdf.index == lf_idx['Index_in_df1']]
+    landfall_info['Min_Distance'] = lf_idx['Min_Distance']
+    landfall_info['Closest_Point_in_df2'] = lf_idx['Closest_Point_in_df2']
+
+    return landfall_info
+
+
+
+
+

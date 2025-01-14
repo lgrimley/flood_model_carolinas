@@ -1,4 +1,6 @@
 import os
+
+import numpy as np
 import pandas as pd
 import xarray as xr
 
@@ -91,3 +93,20 @@ ds_out_interp = ds_out2.interpolate_na(dim='time', method='linear',
 
 ds_out_interp.to_netcdf(fileout)
 print('Done!')
+
+
+
+''' 
+In the future -- SSP585 2070-2100 
+we assume the same tides as the reanalysis so adjust the timestamp
+where 1980 == 2070 (add 90 years to the timestamp)
+'''
+
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\RENCI_EDSReanalysis')
+data = xr.open_dataset(r'EDSReanalysis_V2_1992_2022.nc')
+df = data['time'].to_dataframe()
+df['future'] = df['time'] + pd.DateOffset(years=90)
+data['time'] = df['future']
+data.to_netcdf(r'EDSReanalysis_V2_1992_2022_with90yrOffset.nc')
+
+
