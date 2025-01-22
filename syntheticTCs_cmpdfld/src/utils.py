@@ -5,6 +5,11 @@ import xarray as xr
 import numpy as np
 import geopandas as gpd
 import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import cartopy.crs as ccrs
+from pathlib import Path
+
 
 # Processing TC tracks
 
@@ -91,9 +96,12 @@ def select_TCs_by_AOI_intersect(aoi, tc_tracks_gdf, buffer_km=0):
     return aoi_buff, tc_tracks_gdf
 
 
-def TCR_precip_stats_to_netcdf(tc_ids, inputdir, outputdir):
-    precip_sum_list = []
-    precip_maxRR_list = []
+def TCR_precip_stats2netcdf(tc_ids: list, inputdir: Path, outputdir: Path,
+                            rr_threshold: int=5) -> xr.Dataset:
+    cumP_list = []
+    maxRR_list = []
+    meanRR_list = []
+    meanRR_thresh_list = []
     counter = 0
     for tc_id in tc_ids:
         filename = f'{str(tc_id).zfill(4)}.nc'
@@ -101,29 +109,51 @@ def TCR_precip_stats_to_netcdf(tc_ids, inputdir, outputdir):
 
         # Cumulative precipitation
         precip_sum = d.sum(dim='time')
-        precip_sum_list.append(precip_sum)
+        cumP_list.append(precip_sum)
 
         # Max rain rate across the grid
         max_rain_rate = d.max(dim='time')
-        precip_maxRR_list.append(max_rain_rate)
+        maxRR_list.append(max_rain_rate)
+
+        # Max rain rate across the grid
+        mean_rain_rate = d.mean(dim='time')
+        meanRR_list.append(mean_rain_rate)
+
+        mask = d > rr_threshold
+        mean_rain_rate_thresh = d.where(mask).mean(dim='time')
+        meanRR_thresh_list.append(mean_rain_rate_thresh)
 
         print(f'Processed {counter} out of {len(tc_ids)}')
         counter += 1
 
-    print('Writing netcdfs...')
-    da_sum = xr.concat(precip_sum_list, dim='run')
-    da_sum['run'] = xr.IndexVariable('run', tc_ids)
-    da_sum.to_netcdf(os.path.join(outputdir, 'precip_TC_AvgTotPrecip.nc'))
+    ds_sum = xr.concat(cumP_list, dim='tc_id')
+    ds_sum['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds_sum = ds_sum.rename({'precip':'total_precip'})
 
-    da_max = xr.concat(precip_maxRR_list, dim='run')
-    da_max['run'] = xr.IndexVariable('run', tc_ids)
-    da_max.to_netcdf(os.path.join(outputdir, 'precip_TC_maxRainRate.nc'))
+    ds_max = xr.concat(maxRR_list, dim='tc_id')
+    ds_max['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds_max = ds_max.rename({'precip':'max_RR'})
 
-    return da_sum, da_max
+    ds_mean = xr.concat(meanRR_list, dim='tc_id')
+    ds_mean['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds_mean = ds_mean.rename({'precip':'mean_RR'})
+
+    ds_mean_thresh = xr.concat(meanRR_thresh_list, dim='tc_id')
+    ds_mean_thresh['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds_mean_thresh = ds_mean_thresh.rename({'precip':'mean_RR_thresh'})
+
+    ds = xr.merge([ds_sum, ds_max, ds_mean, ds_mean_thresh])
+    ds.assign_attrs(RR_threshold=rr_threshold)
+    outfile = os.path.join(outputdir, 'tc_precipitation_stats.nc')
+    ds.to_netcdf(outfile)
+    print(f'Created {outfile}')
+
+    return ds
 
 
-def get_TCs_Vmax(tc_ids, inputdir, outputdir):
-    Vmax_list = []
+def TC_windspd_stats2netcdf(tc_ids: list, inputdir: Path, outputdir: Path) -> xr.Dataset:
+    vmax_list = []
+    vmean_list = []
     counter = 0
     for tc_id in tc_ids:
         filename = f'{str(tc_id).zfill(4)}.nc'
@@ -131,17 +161,31 @@ def get_TCs_Vmax(tc_ids, inputdir, outputdir):
 
         # Max wind speed across the grid
         max_wndspd = d['wind_speed'].max(dim='time')
-        Vmax_list.append(max_wndspd)
+        vmax_list.append(max_wndspd)
+
+        # Mean wind speed across the grid
+        mean_wndspd = d['wind_speed'].max(dim='time')
+        vmean_list.append(mean_wndspd)
 
         print(f'Processed {counter} out of {len(tc_ids)}')
         counter += 1
 
-    print('Writing netcdfs...')
-    da = xr.concat(Vmax_list, dim='run')
-    da['run'] = xr.IndexVariable('run', tc_ids)
-    da.to_netcdf(os.path.join(outputdir, 'TC_maxWindSpeeds.nc'))
+    ds1 = xr.concat(vmax_list, dim='tc_id')
+    ds1['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds1 = ds1.to_dataset()
+    ds1 = ds1.rename({'wind_speed':'max_windspd'})
 
-    return da
+    ds2 = xr.concat(vmean_list, dim='tc_id')
+    ds2['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds2 = ds2.to_dataset()
+    ds2 = ds2.rename({'wind_speed':'mean_windspd'})
+
+    ds = xr.merge([ds1, ds2])
+    outfile = os.path.join(outputdir, 'tc_windspeed_stats.nc')
+    ds.to_netcdf(outfile)
+    print(f'Created {outfile}')
+
+    return ds
 
 
 def find_nearest_non_nan_index(df, col_name, index):
@@ -282,6 +326,164 @@ def get_landfall_info(tc_df, gage_locs, clip_gdf):
     return landfall_info
 
 
+def plot_storm_maps(tc_id, sfincs_mod, tc_track_gdf, zsmax_da,
+                    attr_ds, boundary_condition_dir, output_directory):
+
+    # Load CRS stuff for plotting
+    region = sfincs_mod.region
+    dem = sfincs_mod.grid['dep']
+    wkt = dem.raster.crs.to_wkt()
+    utm_zone = dem.raster.crs.to_wkt().split("UTM zone ")[1][:3]
+    utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
+    font = {'family': 'Arial', 'size': 10}
+    mpl.rc('font', **font)
+
+    precip_filepath = os.path.join(boundary_condition_dir, 'precip_2d.nc')
+    precip = sfincs_mod.data_catalog.get_rasterdataset(precip_filepath)
+    precip = precip.where(precip.notnull())
+
+    hmax = zsmax_da - dem
+    hmax = hmax.where(hmax > 0.05)
+
+    da_diff = attr_ds['zsmax_diff']
+    da_c = attr_ds['zsmax_attr']
+    da_c = da_c.where(da_c > 0)
+
+    '''Plot 1: Peak Flood Depth - Compound '''
+    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(5, 7), subplot_kw={'projection': utm},
+                            tight_layout=True, sharex=True, sharey=False)
+    for i in range(len(axs)):
+        if i == 0:
+            # Plot precip
+            ax = axs[i]
+
+            ckwargs = dict(vmin=0, vmax=500, cmap='turbo')
+            cs = precip.sum(dim='time').plot(ax=ax, add_colorbar=False, **ckwargs, zorder=0)
+            region.plot(ax=ax, color='none', edgecolor='white', linewidth=1, zorder=1, alpha=1)
+            tc_track_gdf.geometry.plot(ax=ax, color='red', linewidth=2, zorder=2)
+
+            # Set figure extents
+            minx, miny, maxx, maxy = region.total_bounds
+            ax.set_xlim(minx, maxx)
+            ax.set_ylim(miny, maxy)
+
+            # Add colorbar
+            pos0 = ax.get_position()  # get the original position
+            cax = fig.add_axes([pos0.x1 + 0.075, pos0.y0 + 0.05, 0.05, pos0.height * 0.8])
+            cbar = fig.colorbar(cs, cax=cax, orientation='vertical', label='Total Precipitation (mm)', extend='max')
+            #cbar.set_ticks([0, 100, 200, 300, 400, 500])
+
+            ax.set_axis_off()
+            ax.set_title(f'{tc_id}')
+
+        if i == 1:
+            ax = axs[i]
+            ckwargs = dict(cmap='Blues',  vmin=0.05, vmax=10)
+            cs = hmax.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=2)
+
+            # Plot background/geography layers
+            region.plot(ax=ax, color='grey', edgecolor='none', linewidth=0.5, zorder=1, alpha=1)
+            region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
+            tc_track_gdf.geometry.plot(ax=ax, color='black', linewidth=2, zorder=2)
+
+            minx, miny, maxx, maxy = region.total_bounds
+            ax.set_xlim(minx, maxx)
+            ax.set_ylim(miny, maxy)
+            pos0 = ax.get_position()  # get the original position
+            cax = fig.add_axes([pos0.x1 - 0.05, pos0.y0 + -0.05, 0.04, pos0.height * 0.5])
+            label = 'Max Water Depth\n(m+NAVD88)'
+            cbar = fig.colorbar(cs, cax=cax, orientation='vertical', label=label, extend='max')
+            cbar.set_ticks([0.05, 2, 5, 10])
+            ax.set_title(f'{tc_id}')
+            ax.set_axis_off()
+
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.savefig(os.path.join(output_directory, f'floodmap_precip_{tc_id}.png'), dpi=225, bbox_inches="tight")
+    plt.close()
+
+    ''' Plot 2: Peak Flood Extent Attributed '''
 
 
+    fig, axs = plt.subplots(nrows=2, ncols=1, figsize=(5, 7), subplot_kw={'projection': utm},
+                            tight_layout=True, sharex=True, sharey=False)
+    for i in range(len(axs)):
+        if i == 1:
+            # Plot difference in water level raster
+            ckwargs = dict(cmap='seismic', vmin=-0.2, vmax=0.2)
+            cs = da_diff.plot(ax=axs[i], add_colorbar=False, **ckwargs, zorder=2)
 
+            # Add colorbar
+            label = 'Water Level Difference (m)\ncompound - max. individual'
+            pos0 = axs[i].get_position()  # get the original position
+            cax = fig.add_axes([pos0.x1 + 0.12, pos0.y0 + 0.1, 0.05, pos0.height * 0.7])
+            cbar = fig.colorbar(cs,
+                                cax=cax,
+                                orientation='vertical',
+                                label=label,
+                                extend='both')
+            axs[i].set_title('')
+            axs[i].set_ylabel(f"y coord UTM zone {utm_zone} (m)")
+            axs[i].yaxis.set_visible(True)
+            axs[i].set_xlabel(f"x coord UTM zone {utm_zone} (m)")
+            axs[i].xaxis.set_visible(True)
+            axs[i].ticklabel_format(style='sci', useOffset=False)
+            axs[i].set_aspect('equal')
+
+            region.plot(ax=axs[i], color='grey', edgecolor='none', linewidth=0.5, zorder=1, alpha=1)
+            region.plot(ax=axs[i], color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
+            tc_track_gdf.geometry.plot(ax=axs[i], color='black', linewidth=2, zorder=2)
+
+        if i == 0:
+            levels = np.arange(1, 8)
+            colors = np.array([
+                [252, 141, 98],
+                [217, 95, 2],
+                [141, 160, 203],
+                [117, 112, 179],
+                [102, 194, 165],
+                [27, 158, 119],
+            ]) / 255
+            colors = np.hstack([colors, np.ones((6, 1))])
+            colors[[0, 2, 4], -1] = 0.7
+            cmap, norm = mpl.colors.from_levels_and_colors(levels, colors)
+
+            # Plot the data
+            da_c.plot(ax=axs[i], cmap=cmap, norm=norm, add_colorbar=False, zorder=2)
+
+            # Add colorbar
+            pos1 = axs[i].get_position()  # get the original position
+            cbar_ax = fig.add_axes([pos1.x1 + 0.05, pos1.y0 + pos1.height * 0.4, 0.08, pos1.height])
+            cm = np.arange(1, 5).reshape((2, 2))
+            cbar_ax.imshow(cm, cmap=cmap, norm=norm, aspect='auto')
+            cbar_ax.yaxis.tick_right()
+            cbar_ax.set_yticks([0, 1])
+            cbar_ax.set_yticklabels(['Coastal\n', 'Runoff\n'], va='center', rotation=90, fontsize=10)
+            cbar_ax.set_xticks([0, 1])
+            cbar_ax.set_xticklabels(['Individual', 'Compound'], ha='center', rotation=60, fontsize=10)
+
+            # Fix titles and axis labels
+            axs[i].set_title('')
+            axs[i].set_ylabel(f"y coord UTM zone {utm_zone} (m)")
+            axs[i].yaxis.set_visible(True)
+            axs[i].set_xlabel(f"x coord UTM zone {utm_zone} (m)")
+            axs[i].xaxis.set_visible(False)
+            axs[i].ticklabel_format(style='sci', useOffset=False)
+            axs[i].set_aspect('equal')
+            axs[i].set_title(f'{tc_id}')
+
+            region.plot(ax=axs[i], color='white', edgecolor='none', linewidth=0.5, zorder=1, alpha=1)
+            region.plot(ax=axs[i], color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
+            tc_track_gdf.geometry.plot(ax=axs[i], color='black', linewidth=2, zorder=2)
+
+        # Setup figure extents
+        minx, miny, maxx, maxy = region.total_bounds
+        axs[i].set_xlim(minx, maxx)
+        axs[i].set_ylim(miny, maxy)
+
+    plt.subplots_adjust(wspace=0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.savefig(os.path.join(output_directory, f'zsmax_attribution_{tc_id}.png'), dpi=225, bbox_inches="tight")
+    plt.close()
+
+    return

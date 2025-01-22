@@ -2,6 +2,8 @@ import os
 from hydromt_sfincs import SfincsModel
 from scipy import ndimage
 import rasterio
+import xarray as xr
+import numpy as np
 
 def resample_raster(src_raster, target_resolution, method='nearest'):
     """
@@ -36,7 +38,7 @@ cat = sfincs_mod.data_catalog
 os.chdir(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\published_on_NHERI_120324')
 
 raster1_path = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\subgrid\dep_subgrid_20m.tif'  # Higher resolution raster
-raster2_path = r'.\sfincs wse\SFINCS_FloydHindcast_MaxWSE.tif'  # Lower resolution raster
+raster2_path = r'.\sfincs wse - future\SFINCS_MatthewFuture_MaxWSE.tif'  # Lower resolution raster
 # Read the first raster (higher resolution)
 with rasterio.open(raster1_path) as src1:
     raster1_data = src1.read(1)  # Read the first band
@@ -47,7 +49,7 @@ raster2_resampled = resample_raster(raster2_path, raster1_resolution, method='ne
 if raster1_data.shape != raster2_resampled.shape:
     raise ValueError("The rasters do not have the same shape. Make sure they have the same resolution and extent.")
 
-output_raster_path = '.\sfincs wse\SFINCS_FloydHindcast_MaxWSE_20m.tif'
+output_raster_path = '.\sfincs wse - future\SFINCS_MatthewFuture_MaxWSE_20m.tif'
 # Create the output raster with the same georeferencing as the first raster
 with rasterio.open(output_raster_path, 'w', driver='GTiff', count=1, dtype=raster2_resampled.dtype,
                    width=raster1_data.shape[1], height=raster1_data.shape[0], crs=src1.crs,
@@ -56,14 +58,10 @@ with rasterio.open(output_raster_path, 'w', driver='GTiff', count=1, dtype=raste
 
 # Subgrid elevation
 dep_sbg = cat.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\subgrid\dep_subgrid_20m.tif')
-zsmax_sbg = cat.get_rasterdataset(r'.\sfincs wse\SFINCS_FloydHindcast_MaxWSE_20m.tif')
+zsmax_sbg = cat.get_rasterdataset(r'.\sfincs wse - future\SFINCS_MatthewFuture_MaxWSE_20m.tif')
 mask = zsmax_sbg > dep_sbg
 zsmax_out = zsmax_sbg.where(mask)
-zsmax_out.raster.to_raster(r'.\sfincs wse 20m\floyd_wse_mask_20m.tif', nodata=-9999.0)
+zsmax_out.raster.to_raster(r'.\sfincs wse 20m - future\matthew_wse_mask_20m.tif', nodata=-9999.0)
 
-# Water level greater than elevation at the grid resolution
-# zsmax = cat.get_rasterdataset(r'.\sfincs wse\SFINCS_FlorenceHindcast_MaxWSE.tif')
-# dep = cat.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\subgrid\dep.tif')
-# mask = zsmax > dep
-# zsmax_out = zsmax.where(mask)
-#zsmax_out.raster.to_raster('florence_wse_mask.tif', nodata=-9999.0)
+
+
