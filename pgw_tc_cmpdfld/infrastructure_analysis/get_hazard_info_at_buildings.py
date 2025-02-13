@@ -13,6 +13,8 @@ import hydromt
 from hydromt import DataCatalog
 import hydromt_sfincs
 from hydromt_sfincs import SfincsModel
+mpl.use('TkAgg')
+plt.ion()
 
 
 # Filepath to data catalog yml
@@ -32,12 +34,13 @@ Read in NC and SC buildings data
 
 '''
 # Read in structures information and clip to the study area. This might take a little while and only needs to be run once...
-nc_buildings = gpd.read_file(filename=r'Z:\Data-Expansion\users\lelise\data\storm_data\hurricanes\X_observations\nfip_flood_damage_NC'
-                             r'\included_data.gdb',
-                             layer='buildings',
+nc_buildings = gpd.read_file(filename=r'Z:\Data-Expansion\users\lelise\data\geospatial\NC_Buildings_p.gdb\NC_Buildings_p.gdb',
+                             layer='NC_Buildings',
                              mask=studyarea_gdf).to_crs(studyarea_gdf.crs)
+nc_buildings['geometry'] = nc_buildings.centroid
 nc_buildings['STATE'] = 'NC'
-b1 = nc_buildings.drop(nc_buildings.columns[~nc_buildings.columns.isin(['STATE', 'geometry'])], axis=1)
+#b1 = nc_buildings.drop(nc_buildings.columns[~nc_buildings.columns.isin(['STATE', 'geometry'])], axis=1)
+b1 = nc_buildings
 print('Number of NC Buildings in Study Area:', str(len(nc_buildings)))
 
 # Load SC buildings from NSI. This might take a little while and only needs to be run once...
@@ -62,7 +65,7 @@ LOAD MODEL OUTPUTS
 
 '''
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final')
 da_zsmax = xr.open_dataset('pgw_zsmax.nc', engine='netcdf4')  # Max water level
 da_vmax = xr.open_dataset('pgw_vmax.nc', engine='netcdf4')  # Max velocity
 da_tmax = xr.open_dataset('pgw_tmax.nc', engine='netcdf4')  # Time of inundation
@@ -74,109 +77,152 @@ dep = xr.open_dataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS
 
 # GUT RUN IDS FOR HURRICANE FLORENCE ONLY
 run_ids = da_zsmax.run.values
-subset_list = [r for r in run_ids if 'flor_fut' in r]
-subset_list = [r for r in subset_list if 'compound' in r]
+storm = 'flor'
+scenario = 'compound'
+subset_list = [r for r in run_ids if storm in r]
+subset_list = [r for r in subset_list if scenario in r]
 subset_list = [r for r in subset_list if 'SF8' not in r]
 print(subset_list)
 
 
 ''' 
-
 Extract model output at buildings 
- 
 '''
-
-# PRESENT PEAK WATER LEVEL
-da_zsmax_pres = da_zsmax.sel(run='flor_pres_compound')
-v = da_zsmax_pres['zsmax'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-gdf[f'pres_zsmax'] = v.transpose()
-
-
-# FUTURE ENSEMBLE MEAN PEAK WATER LEVEL
-da_zsmax_fut = da_zsmax_ensmean.sel(run='flor_fut_compound_mean')
-v = da_zsmax_fut['flor_fut_coastal_mean'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-gdf[f'fut_zsmax'] = v.transpose()
 
 # GROUND ELEVATION
 v = dep['band_data'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
 gdf['gnd_elev'] = v.transpose()
 
-# PEAK FLOOD DEPTH PRESENT, FUTURE, AND DIFFERENCE
-gdf['fut_depth'] = gdf['fut_zsmax'] - gdf['gnd_elev']
-gdf['pres_depth'] = gdf['pres_zsmax'] - gdf['gnd_elev']
-gdf['depth_diff'] = gdf['fut_depth'] - gdf['pres_depth']
 
-''' 
+for storm in ['flor', 'floy', 'matt']:
+    name_prefix = f'{storm}_{scenario}'
+    # FLOOD PROCESS CLASSIFICATION
+    # Present
+    d = da_zsmax_class.sel(run=f'{storm}_pres')
+    d = d.rename({list(d.keys())[0]:'class'})
+    v = d['class'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+    gdf[f'{name_prefix}_hclass'] = v.transpose()
 
-Subset the buildings based on flood depths - extract velocity, tmax, flood process classification
+    # Future
+    d = da_zsmax_ensmean_class.sel(run=f'{storm}_fut_ensmean')
+    d= d.rename({list(d.keys())[0]:'class'})
+    v = d['class'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+    gdf[f'{name_prefix}_pclass'] = v.transpose()
 
-'''
-# SUBSET BUILDINGS TO THOSE THAT FLOODED IN THE PRESENT OR FUTURE GREATER THAN THRESHOLD
-hmin = 0.1
-gdf_fld = gdf[(gdf['fut_depth'] > hmin) | (gdf['pres_depth'] > hmin)]
-print(len(gdf_fld))
-print(gdf_fld['depth_diff'].describe())
+    for scenario in ['compound', 'runoff', 'coastal']:
+        # PRESENT PEAK WATER LEVEL
+        da_zsmax_pres = da_zsmax.sel(run=f'{storm}_pres_{scenario}')
+        v = da_zsmax_pres['zsmax'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+        gdf[f'{name_prefix}_hzsmax'] = v.transpose()
 
-# PRESENT PEAK VELOCITY
-da_vmax_pres = da_vmax.sel(run='flor_pres_compound')
-v = da_vmax_pres['vmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'pres_vmax'] = v.transpose()
+        # FUTURE ENSEMBLE MEAN PEAK WATER LEVEL
+        da_zsmax_fut = da_zsmax_ensmean.sel(run=f'{storm}_fut_{scenario}_mean')
+        da_zsmax_fut = da_zsmax_fut.rename({list(da_zsmax_fut.keys())[0]:'zsmax'})
+        v = da_zsmax_fut['zsmax'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+        gdf[f'{name_prefix}_pzsmax'] = v.transpose()
 
-# FUTURE MEAN PEAK VELOCITY
-da_vmax_fut = da_vmax.sel(run=subset_list).mean(dim='run')
-v = da_vmax_fut['vmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'fut_vmax'] = v.transpose()
+        # PEAK FLOOD DEPTH PRESENT, FUTURE, AND DIFFERENCE
+        gdf[f'{name_prefix}_pdepth'] = gdf[f'{name_prefix}_pzsmax'] - gdf['gnd_elev']
+        gdf[f'{name_prefix}_hdepth'] = gdf[f'{name_prefix}_hzsmax'] - gdf['gnd_elev']
+        gdf[f'{name_prefix}_depth_diff'] = gdf[f'{name_prefix}_pzsmax'] - gdf[f'{name_prefix}_hzsmax']
 
-# Difference in Future and Present Peak Velocity
-gdf_fld[f'vmax_diff'] = gdf_fld[f'fut_vmax'] - gdf_fld[f'pres_vmax']
 
-# PRESENT TIME OF INUNDATION
-da_tmax_pres = da_tmax.sel(run='flor_pres_compound')
-v = da_tmax_pres['tmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'pres_tmax'] = v.transpose()
+'''' Load in the data '''
+# Load the water level data for the historical return periods
+histdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\ncep\aep'
+file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
+h_aep = xr.concat(objs=da_list, dim='scenario')
+h_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
-# FUTURE MEAN TIME OF INUNDATION
-da_tmax_fut = da_tmax.sel(run=subset_list).mean(dim='run')
-v = da_tmax_fut['tmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'fut_tmax'] = v.transpose()
+da_zsmax_fut = h_aep.sel(scenario=f'compound')
+v = da_zsmax_fut.sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+df = pd.DataFrame(v.T)
+colnames = [f'hist_T{T}' for T in h_aep.return_period.values]
+df.columns = colnames
+gdf = pd.concat(objs=[gdf, df], ignore_index=False)
 
-# Difference in Future and Present Tmax
-gdf_fld[f'tmax_diff'] = gdf_fld[f'fut_tmax'] - gdf_fld[f'pres_tmax']
+# Load the water level data for the projected return periods
+projdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\canesm_ssp585\aep'
+file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
+p_aep = xr.concat(objs=da_list, dim='scenario')
+p_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
-# FLOOD PROCESS CLASSIFICATION
-# Present
-da_zsmax_class_pres = da_zsmax_class.sel(run='flor_pres')
-da_zsmax_class_pres['flor_pres'].raster.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\test.tif', nodata=0)
+da_zsmax_fut = p_aep.sel(scenario=f'compound')
+v = da_zsmax_fut.sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
+df = pd.DataFrame(v.T)
+colnames = [f'proj_T{T}' for T in h_aep.return_period.values]
+df.columns = colnames
+gdf = pd.concat(objs=[gdf, df], ignore_index=False)
 
-v = da_zsmax_class_pres['flor_pres'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'pres_zsmax_class'] = v.transpose()
+outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\buildings_tc_exposure.csv'
+gdf.to_csv(outfile)
+# '''
+# Subset the buildings based on flood depths - extract velocity, tmax, flood process classification
+# '''
+# # SUBSET BUILDINGS TO THOSE THAT FLOODED IN THE PRESENT OR FUTURE GREATER THAN THRESHOLD
+# hmin = 0.1
+# gdf_fld = gdf[(gdf['fut_depth'] > hmin) | (gdf['pres_depth'] > hmin)]
+# print(len(gdf_fld))
+# print(gdf_fld['depth_diff'].describe())
+#
+# # PRESENT PEAK VELOCITY
+# da_vmax_pres = da_vmax.sel(run='flor_pres_compound')
+# v = da_vmax_pres['vmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
+# gdf_fld[f'pres_vmax'] = v.transpose()
+#
+# # FUTURE MEAN PEAK VELOCITY
+# da_vmax_fut = da_vmax.sel(run=subset_list).mean(dim='run')
+# v = da_vmax_fut['vmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
+# gdf_fld[f'fut_vmax'] = v.transpose()
+#
+# # Difference in Future and Present Peak Velocity
+# gdf_fld[f'vmax_diff'] = gdf_fld[f'fut_vmax'] - gdf_fld[f'pres_vmax']
+#
+# # PRESENT TIME OF INUNDATION
+# da_tmax_pres = da_tmax.sel(run='flor_pres_compound')
+# v = da_tmax_pres['tmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
+# gdf_fld[f'pres_tmax'] = v.transpose()
+#
+# # FUTURE MEAN TIME OF INUNDATION
+# da_tmax_fut = da_tmax.sel(run=subset_list).mean(dim='run')
+# v = da_tmax_fut['tmax'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
+# gdf_fld[f'fut_tmax'] = v.transpose()
+#
+# # Difference in Future and Present Tmax
+# gdf_fld[f'tmax_diff'] = gdf_fld[f'fut_tmax'] - gdf_fld[f'pres_tmax']
 
-# For Marissa
-da_zsmax_class_pres_MW = da_zsmax_class_pres
-da_zsmax_class_pres_MW2 = xr.where(cond=((da_zsmax_class_pres_MW == 2) | (da_zsmax_class_pres_MW == 4)),
-                                  x=5, y=da_zsmax_class_pres_MW)
-da_zsmax_class_pres_MW2 = xr.where(cond=(da_zsmax_class_pres_MW2 == 0),
-                                  x=np.nan, y=da_zsmax_class_pres_MW2)
-r = da_zsmax_class_pres_MW2['flor_pres'].raster
-r.set_crs(32617)
-r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_present_peakWL.tif', nodata=0)
 
-# FUTURE ENSEMBLE MEAN
-da_zsmax_ensmean_class = da_zsmax_ensmean_class.sel(run='flor_fut_ensmean')
-v = da_zsmax_ensmean_class['flor_fut_ensmean'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
-gdf_fld[f'fut_zsmax_class'] = v.transpose()
 
-gdf_fld2 = np.round(gdf_fld, decimals=3)
-gdf_fld2.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\florence_buildings_exposed.csv')
 
-da_zsmax_class_fut_MW = da_zsmax_ensmean_class
-da_zsmax_class_fut_MW = xr.where(cond=((da_zsmax_class_fut_MW == 2) | (da_zsmax_class_fut_MW == 4)),
-                                  x=5, y=da_zsmax_class_fut_MW)
-da_zsmax_class_fut_MW = xr.where(cond=(da_zsmax_class_fut_MW == 0),
-                                  x=np.nan, y=da_zsmax_class_fut_MW)
-r = da_zsmax_class_fut_MW['flor_fut_ensmean'].raster
-r.set_crs(32617)
-r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_future_peakWL.tif', nodata=0)
+# # For Marissa
+# da_zsmax_class_pres_MW = da_zsmax_class_pres
+# da_zsmax_class_pres_MW2 = xr.where(cond=((da_zsmax_class_pres_MW == 2) | (da_zsmax_class_pres_MW == 4)),
+#                                   x=5, y=da_zsmax_class_pres_MW)
+# da_zsmax_class_pres_MW2 = xr.where(cond=(da_zsmax_class_pres_MW2 == 0),
+#                                   x=np.nan, y=da_zsmax_class_pres_MW2)
+# r = da_zsmax_class_pres_MW2['flor_pres'].raster
+# r.set_crs(32617)
+# r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_present_peakWL.tif', nodata=0)
+#
+# # FUTURE ENSEMBLE MEAN
+# da_zsmax_ensmean_class = da_zsmax_ensmean_class.sel(run='flor_fut_ensmean')
+# v = da_zsmax_ensmean_class['flor_fut_ensmean'].sel(x=gdf_fld['geometry'].x.to_xarray(), y=gdf_fld['geometry'].y.to_xarray(), method='nearest').values
+# gdf_fld[f'fut_zsmax_class'] = v.transpose()
+#
+# gdf_fld2 = np.round(gdf_fld, decimals=3)
+# gdf_fld2.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3\infrastructure_exposure\florence_buildings_exposed.csv')
+#
+# da_zsmax_class_fut_MW = da_zsmax_ensmean_class
+# da_zsmax_class_fut_MW = xr.where(cond=((da_zsmax_class_fut_MW == 2) | (da_zsmax_class_fut_MW == 4)),
+#                                   x=5, y=da_zsmax_class_fut_MW)
+# da_zsmax_class_fut_MW = xr.where(cond=(da_zsmax_class_fut_MW == 0),
+#                                   x=np.nan, y=da_zsmax_class_fut_MW)
+# r = da_zsmax_class_fut_MW['flor_fut_ensmean'].raster
+# r.set_crs(32617)
+# r.to_raster(r'Z:\Data-Expansion\users\lelise\data_share\SFINCS_OUTPUT\pgw_version_20240720\classified\florence_future_peakWL.tif', nodata=0)
 
 
 

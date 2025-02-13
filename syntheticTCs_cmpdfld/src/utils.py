@@ -151,21 +151,42 @@ def TCR_precip_stats2netcdf(tc_ids: list, inputdir: Path, outputdir: Path,
     return ds
 
 
-def TC_windspd_stats2netcdf(tc_ids: list, inputdir: Path, outputdir: Path) -> xr.Dataset:
+def TC_windspd_stats2netcdf(tc_ids: list, inputdir: Path,
+                            outputdir: Path) -> xr.Dataset:
     vmax_list = []
     vmean_list = []
+    wnd_direction_list = []
+    mean_wndspd_thresh_list = []
     counter = 0
     for tc_id in tc_ids:
         filename = f'{str(tc_id).zfill(4)}.nc'
         d = xr.open_dataset(os.path.join(inputdir, filename))
+
+        # Calculate the wind speed (magnitude) and direction (angle)
+        wind_direction_rad = np.arctan2(d['wind10_v'], d['wind10_u'])  # Direction in radians
+        wind_direction_deg = np.degrees(wind_direction_rad)
+        # Wind conventions: The direction represents the origin of the wind.
+        # 0°: Wind coming from the north (i.e., blowing southward).
+        # 90°: Wind coming from the east (i.e., blowing westward).
+        # 180°: Wind coming from the south (i.e., blowing northward).
+        # 270°: Wind coming from the west (i.e., blowing eastward).
+        # Normalize wind direction to be between 0° and 360°
+        normalized_direction = (wind_direction_deg + 360) % 360
+        wnd_direction = normalized_direction.mean(dim='time')
+        wnd_direction_list.append(wnd_direction)
 
         # Max wind speed across the grid
         max_wndspd = d['wind_speed'].max(dim='time')
         vmax_list.append(max_wndspd)
 
         # Mean wind speed across the grid
-        mean_wndspd = d['wind_speed'].max(dim='time')
+        mean_wndspd = d['wind_speed'].mean(dim='time')
         vmean_list.append(mean_wndspd)
+
+        # Mean wind speed with threshold
+        mask = d['wind_speed'] > 5
+        mean_wndspd_thresh = d['wind_speed'].where(mask).mean(dim='time')
+        mean_wndspd_thresh_list.append(mean_wndspd_thresh)
 
         print(f'Processed {counter} out of {len(tc_ids)}')
         counter += 1
@@ -180,7 +201,17 @@ def TC_windspd_stats2netcdf(tc_ids: list, inputdir: Path, outputdir: Path) -> xr
     ds2 = ds2.to_dataset()
     ds2 = ds2.rename({'wind_speed':'mean_windspd'})
 
-    ds = xr.merge([ds1, ds2])
+    ds4 = xr.concat(mean_wndspd_thresh_list, dim='tc_id')
+    ds4['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds4 = ds4.to_dataset()
+    ds4 = ds4.rename({'wind_speed':'mean_windspd_threshold'})
+
+    ds3 = xr.concat(wnd_direction_list, dim='tc_id')
+    ds3['tc_id'] = xr.IndexVariable('tc_id', tc_ids)
+    ds3 = ds3.to_dataset()
+    ds3 = ds3.rename({'wind10_v':'mean_direction_deg'})
+
+    ds = xr.merge([ds1, ds2, ds4, ds3])
     outfile = os.path.join(outputdir, 'tc_windspeed_stats.nc')
     ds.to_netcdf(outfile)
     print(f'Created {outfile}')
@@ -299,6 +330,8 @@ def get_landfall_info(tc_df, gage_locs, clip_gdf):
     tc_gdf = tc_gdf.clip(clip_gdf)
     gage_locs_gdf = gpd.GeoDataFrame(gage_locs,
                                      geometry=gpd.points_from_xy(x=gage_locs['x'], y=gage_locs['y'], crs=4326))
+    tc_gdf = tc_gdf.to_crs(32617)
+    gage_locs_gdf = gage_locs_gdf.to_crs(32617)
 
     # Create an empty list to store the results
     min_distances = []
@@ -487,3 +520,39 @@ def plot_storm_maps(tc_id, sfincs_mod, tc_track_gdf, zsmax_da,
     plt.close()
 
     return
+
+
+def classify_zsmax_by_process(da: xr.DataArray, da_diff: xr.DataArray, hmin: float=0.1) -> xr.Dataset:
+    # Outputs a data array with the zsmax attributed to processes (codes 0 to 4)
+    # Create masks based on the driver that caused the max water level given a depth threshold hmin
+    compound_mask = da_diff > hmin
+    coastal_mask = da.sel(scenario='coastal').fillna(0) > da.sel(scenario=['runoff']).fillna(0).max('scenario')
+    runoff_mask = da.sel(scenario='runoff').fillna(0) > da.sel(scenario=['coastal']).fillna(0).max('scenario')
+    assert ~np.logical_and(runoff_mask, coastal_mask).any()
+    da_classified = (xr.where(coastal_mask, x=compound_mask + 1, y=0)
+                     + xr.where(runoff_mask, x=compound_mask + 3, y=0)).compute()
+
+    da_classified.name = 'zsmax_classified'
+    da_classified = da_classified.assign_attrs(hmin=hmin,
+                                               no_class=0, coast_class=1, coast_compound_class=2,
+                                               runoff_class=3, runoff_compound_class=4)
+    da_classified = da_classified.astype(int)
+
+    ds = xr.Dataset({'zsmax_diff': da_diff,
+                     'zsmax_attr': da_classified})
+    return ds
+
+
+def calc_diff_in_zsmax_compound_minus_max_individual(da: xr.DataArray) -> xr.DataArray:
+    # Outputs a data array of the diff in water level compound minus max. single driver
+    # Calculate the max water level at each cell across the coastal and runoff drivers
+    da_single_max = da.sel(scenario=['runoff', 'coastal']).max('scenario')
+
+    # Calculate the difference between the max water level of the compound and the max of the individual drivers
+    da_diff = (da.sel(scenario='compound') - da_single_max).compute()
+    da_diff.name = 'zsmax_diff'
+    da_diff.attrs = da.attrs
+    da_diff.assign_attrs(units='m')
+    da_diff.assign_attrs(description = 'diff in waterlevel compound minus max. single driver')
+
+    return da_diff

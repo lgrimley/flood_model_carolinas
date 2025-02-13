@@ -56,17 +56,17 @@ def calc_stats(observed, modeled):
 
 
 # Load in model and read results
-cat_dir = r'Z:\users\lelise\data'
+cat_dir = r'Z:\Data-Expansion\users\lelise\data'
 yml_base_CONUS = os.path.join(cat_dir, 'data_catalog_BASE_CONUS.yml')
 yml_base_Carolinas = os.path.join(cat_dir, 'data_catalog_BASE_Carolinas.yml')
 yml_sfincs_Carolinas = os.path.join(cat_dir, 'data_catalog_SFINCS_Carolinas.yml')
 
-os.chdir(r'Z:\users\lelise\projects\ENC_CompFld\Chapter1\sfincs\final_model')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter1_FlorenceValidation\sfincs_models\mod_v4_flor')
 model_roots = [
     # 'ENC_200m_sbg5m_avgN_adv1_eff75',
     # 'ENC_200m_sbg5m_avgN_adv1_eff25',
     # 'ENC_200m_sbg5m_avgN_adv1_eff75',
-    'ENC_200m_sbg5m_noChannels_avgN',
+    'ENC_200m_sbg5m_avgN_adv1_eff75',
     # 'ENC_200m_sbg5m_avgN_LPD1m',
     # 'ENC_200m_sbg5m_noChannels_avgN'
 ]
@@ -78,14 +78,14 @@ for model_root in model_roots:
     mod.read_results()
 
     # Create a directory to save data and figures to
-    out_dir = os.path.join(mod.root, 'validation', 'hwm')
+    out_dir = os.path.join(mod.root, 'validation', 'hwm2')
     if not os.path.exists(out_dir):
         os.makedirs(out_dir)
 
     '''' Read in HWM data '''
     # Read USGS HWM data
     storm = 'florence'
-    hwm_usgs = hwm_to_gdf(csv_file_path=rf'Z:\users\lelise\geospatial\observations\usgs_{storm}_FilteredHWMs.csv',
+    hwm_usgs = hwm_to_gdf(csv_file_path=rf'Z:\Data-Expansion\users\lelise\data\storm_data\hurricanes\2018_florence\observations\usgs_{storm}_FilteredHWMs.csv',
                           agency='usgs',
                           quality=3,
                           dst_crs=mod.crs.to_epsg())
@@ -93,19 +93,18 @@ for model_root in model_roots:
     hwm_usgs = hwm_usgs[hwm_usgs['stateName'].isin(['NC', 'SC'])]
 
     # Read NCEM HWM file and write to CSV
-    if os.path.exists(r'Z:\users\lelise\data\NC_State_Agencies\NCEM_HWM\NCEM_hwm_database_Sep2023.csv') is False:
-        hwm_ncem = gpd.read_file(r'Z:\users\lelise\projects\ENC_CompFld\HWM_master_share_Sept2023\HWM_master_share.gdb')
+    if os.path.exists(r'Z:\Data-Expansion\users\lelise\data\geospatial\NC_State_Agencies\NCEM_HWM\NCEM_hwm_database_Sep2023.csv') is False:
+        hwm_ncem = gpd.read_file(r'Z:\Data-Expansion\users\lelise\data\geospatial\NC_State_Agencies\NCEM_HWM\HWM_master_share.gdb')
         hwm_ncem_df = pd.DataFrame(hwm_ncem)
         hwm_ncem_df.drop('geometry', inplace=True, axis=1)
         hwm_ncem_df[hwm_ncem_df.isnull()] = np.nan
         hwm_ncem_df[hwm_ncem_df.isna()] = np.nan
         hwm_ncem_df.to_csv(
-            r'Z:\users\lelise\projects\ENC_CompFld\HWM_master_share_Sept2023\NCEM_hwm_database_Sep2023.csv',
+            r'Z:\Data-Expansion\users\lelise\data\geospatial\NC_State_Agencies\NCEM_HWM\NCEM_hwm_database_Sep2023.csv',
             index=False)
 
     # Read in NCEM HWM data
-    hwm_ncem = hwm_to_gdf(csv_file_path=r'Z:\users\lelise\data\NC_State_Agencies\NCEM_HWM'
-                                        r'\NCEM_hwm_database_Sep2023.csv', agency='ncem',
+    hwm_ncem = hwm_to_gdf(csv_file_path=r'Z:\Data-Expansion\users\lelise\data\geospatial\NC_State_Agencies\NCEM_HWM\NCEM_hwm_database_Sep2023.csv', agency='ncem',
                           quality=None, dst_crs=mod.crs.to_epsg())
     print(hwm_ncem['storm_name'].unique())
     print(hwm_ncem['data_source'].unique())
@@ -149,8 +148,7 @@ for model_root in model_roots:
 
     ''' Calculate HWM stats by HUC6 Watershed '''
     # Assign to HUC6
-    huc_boundary = gpd.read_file(r'Z:\users\lelise\geospatial\hydrography\nhd\NHD_H_North_Carolina_State_Shape\Shape'
-                                 r'\WBDHU6.shp')
+    huc_boundary = gpd.read_file(r'Z:\Data-Expansion\users\lelise\data\geospatial\hydrography\nhd\NHD_H_North_Carolina_State_Shape\Shape\WBDHU6.shp')
     huc_boundary.to_crs(mod.crs, inplace=True)
     huc_boundary = huc_boundary[["HUC6", "Name", "geometry"]]
     hwm = gpd.tools.sjoin(left_df=hwm, right_df=huc_boundary, how='left')
@@ -158,7 +156,7 @@ for model_root in model_roots:
 
     # Assign to State
     states = cat.get_geodataframe(
-        r'Z:\users\lelise\geospatial\boundary\us_boundary\cb_2018_us_state_500k\cb_2018_us_state_500k.shp')
+        r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\us_boundary\cb_2018_us_state_500k\cb_2018_us_state_500k.shp')
     states = states[states['NAME'].isin(['South Carolina', 'North Carolina'])]
     states.to_crs(epsg=32617, inplace=True)
     states = states[['STUSPS', 'geometry']]
@@ -168,7 +166,7 @@ for model_root in model_roots:
     hwm['ycoords'] = hwm.geometry.y.to_xarray()
 
     ''' Extract Depth '''
-    sbg = cat.get_rasterdataset(os.path.join(mod.root, 'subgrid', 'dep_subgrid.tif'))
+    sbg = cat.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter1_FlorenceValidation\sfincs_models\mod_v4_flor\subgrid\dep_subgrid.tif')
     hmax = utils.downscale_floodmap(
         zsmax=mod.results["zsmax"].max(dim='timemax'),
         dep=sbg,
@@ -176,7 +174,7 @@ for model_root in model_roots:
         gdf_mask=mod.region,
         reproj_method='bilinear'
     )
-    hmax.raster.to_raster(os.path.join(os.getcwd(), 'floodmaps', f'noChannels.tif'), nodata=np.nan)
+    #hmax.raster.to_raster(os.path.join(os.getcwd(), 'floodmaps', f'noChannels.tif'), nodata=np.nan)
 
     xx = hwm['geometry'].x.to_xarray()
     yy = hwm['geometry'].y.to_xarray()
@@ -184,6 +182,9 @@ for model_root in model_roots:
     hwm['sfincs_hmax_m'].fillna(0, inplace=True)
     hwm['height_above_gnd_m'] = hwm['height_above_gnd'] * 0.3048
     hwm['depth_error'] = hwm['sfincs_hmax_m'] - hwm['height_above_gnd_m']
+
+    hwm['height_above_gnd_m_sbg'] = sbg.sel(x=xx, y=yy, method='nearest').values.transpose()
+    hwm['depth_error_sbg'] = hwm['sfincs_hmax_m'] - hwm['height_above_gnd_m_sbg']
 
     # Write out all the HWM data
     hwm.to_csv(os.path.join(out_dir, 'hwm_error_all.csv'), index=False)

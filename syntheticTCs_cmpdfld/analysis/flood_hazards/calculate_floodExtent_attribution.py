@@ -13,7 +13,7 @@ This code calculates the flooded area by each process for the entire model domai
 
 '''
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\ncep')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\canesm_ssp585')
 
 # Lazily load the zsmax data
 file_paths = [file for file in os.listdir() if ('attribution' in file) & (file.endswith('.nc'))]
@@ -62,7 +62,5 @@ for tc_index in tc_ids:
 
 # Output the results to a csv
 fld_area_df.round(3).to_csv('overland_flooded_area_table.csv')
-
-
 
 

@@ -22,13 +22,13 @@ sfincs_mod.read() # for some reason this has to be run twice for the code to wor
 # Change the directory to the model results
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs')
 
-run_group = 'ncep'
-foldname = 'NCEP_Reanalysis'
+run_group = 'canesm_ssp585'
+foldname = 'CMIP6_585'
 group_size = 125
 
 root = Path(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\{run_group}_runs\completed_runs')
 # These are landfall vmax
-tc_ids_vmax = pd.read_csv(fr'.\02_DATA\{foldname}\tracks\{run_group}_landfall_vmax.csv', index_col=0)
+tc_ids_vmax = pd.read_csv(fr'.\02_DATA\{foldname}\tracks\landfall_vmax\adcirc_tcs\{run_group}_landfall_vmax.csv', index_col=0)
 # But these are the storms we actually have ADCIRC data for
 correct = pd.read_csv(fr'.\02_DATA\{foldname}\stormTide\gage_peaks_ZerosRemoved_{run_group}.csv',index_col=0)
 # So take only the TC IDs of the storms we care about and have runs for
@@ -50,31 +50,38 @@ for group in groups:
     # Create an empty dictionary to save the SFINCS results as we loop through the TC tracks
     scenario_results = []
     attribution_results = []
+    keep_ids = []
     for tc_index in group['tc_id'].values:
         # This is the directory where the model run files are saved that we read in
         tc_root = os.path.join(root, f'TC_{str(tc_index).zfill(4)}')
-        try:
-            # Try to load the SFINCS outputs for the track run and save them to the results dictionary
-            r = TCFloodHazard(tc_root=Path(tc_root), sfincs_mod = sfincs_mod, tc_index=tc_index, tracks=run_group,
-                              zsmax_threshold=0.05)
-            scenario_results.append(r.scenario_results)
-            attribution_results.append(r.attribution_results)
-            print(f'Successfully processed {tc_index}')
-        except Exception as e:
-            print(e)
-            print(f'Issue with {tc_index}')
+        if os.path.exists(os.path.join(tc_root, 'runoff')) is False:
+            print(f'skipping {tc_index}')
             continue
+        else:
+            try:
+                # Try to load the SFINCS outputs for the track run and save them to the results dictionary
+                r = TCFloodHazard(tc_root=Path(tc_root), sfincs_mod = sfincs_mod,
+                                  tc_index=tc_index, tracks=run_group,
+                                  zsmax_threshold=0.05)
+                scenario_results.append(r.scenario_results)
+                attribution_results.append(r.attribution_results)
+                print(f'Successfully processed {tc_index}')
+                keep_ids.append(tc_index)
+            except Exception as e:
+                print(e)
+                print(f'Issue with {tc_index}')
+                continue
 
     # Write the outputs to NetCDFs
     attrs = {
         'description': f'Modeled SFINCS ouputs for {group_info}',
         'track_model' : run_group,
         'author': 'Lauren Grimley',
-        'date_created' : '1/16/2025'
+        'date_created' : '1/23/2025'
     }
 
     ds1 = xr.concat(objs=scenario_results, dim='tc_id')
-    ds1['tc_id'] = xr.IndexVariable(dims='tc_id', data=group['tc_id'].values)
+    ds1['tc_id'] = xr.IndexVariable(dims='tc_id', data=keep_ids)
     var = 'zsmax'
     outfilepath = os.path.join(outputdir, run_group, f'{var}_{group_info}.nc')
     if os.path.exists(outfilepath) is False:
@@ -94,7 +101,7 @@ for group in groups:
     outfilepath = os.path.join(outputdir, run_group, f'attribution_{group_info}.nc')
     if os.path.exists(outfilepath) is False:
         ds2 = xr.concat(objs=attribution_results, dim='tc_id')
-        ds2['tc_id'] = xr.IndexVariable(dims='tc_id', data=group['tc_id'].values)
+        ds2['tc_id'] = xr.IndexVariable(dims='tc_id', data=keep_ids)#group['tc_id'].values)
         ds2.attrs = attrs
         outfilepath = os.path.join(outputdir, run_group, f'attribution_{group_info}.nc')
         print(f'Writing attribution...')
@@ -106,6 +113,4 @@ for group in groups:
     print(f"Elapsed time writing {group_info}: {elapsed_time} seconds")
     counter += 1
     print(f'{counter} out of {len(groups)} groups processed...')
-
-
 

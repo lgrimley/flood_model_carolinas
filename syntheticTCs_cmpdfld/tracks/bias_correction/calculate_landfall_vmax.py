@@ -10,6 +10,7 @@ region = mod.region.to_crs(4326).buffer(1.8)
 
 # ADCIRC station locations that are used for calculating approximate landfall location
 gage_locs = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.csv')
+
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_245\tracks')
 for file in os.listdir(os.getcwd()):
     if file.endswith('.mat'):
@@ -42,6 +43,39 @@ for file in os.listdir(os.getcwd()):
 
         out = landfall_df[['tc_id', 'vstore100']]
         out.to_csv(fr'{gcm}_{ssp}_landfall_vmax.csv')
+
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\tracks')
+matfile = 'UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'
+tc_tracks = sio.loadmat(f'{matfile}')
+
+# Load the TC IDs that were modeled in ADCIRC (almost all tracks are within 200km of the gage locations)
+modeled_tcs = pd.read_csv(fr'../stormTide/gage_peaks_ZerosRemoved_ncep.csv', index_col=0)
+modeled_tcs['tc_id'] = modeled_tcs.index.tolist()
+tc_ids = modeled_tcs['tc_id'].tolist()
+
+# For each TC track, figure out the approximate landfall time and wind speed, save to dataframe
+landfall_df = pd.DataFrame()
+counter = 0
+tot = len(tc_ids)
+issue_tcs = []
+for tc_id in tc_ids:
+    tc_df = get_track_info_in_df(tc_id, tc_tracks)
+    tc_df = get_track_datetime(tc_df)
+    tc_df2 = tc_df[tc_df['vt100'] != 0]
+    try:
+        lf_df = get_landfall_info(tc_df=tc_df2, gage_locs=gage_locs, clip_gdf=region)
+        lf_df['tc_id'] = tc_id
+        landfall_df = pd.concat(objs = [landfall_df, lf_df], axis=0, ignore_index=True)
+    except:
+        issue_tcs.append(tc_id)
+        print(f'Issue with {tc_id}')
+    print(f'{counter} out of {tot}')
+    counter += 1
+
+out = landfall_df
+out.to_csv(fr'ncep_landfall_vmax_v2.csv')
+
+
 
 # gage_tcs = pd.read_csv(r'.\stormTide\gage_peaks_ZerosRemoved.csv', index_col = 0)
 #

@@ -10,7 +10,7 @@ model_map = containers.Map({1, 2, 3, 4, 5}, {'canesm', 'cnrm6', ...
 %rps = 5:500; 
 
 % Read in the historical (NCEP) vmax at landfall
-temp = readtable("vmax/NCEP/ncep_landfall_vmax.csv");
+temp = readtable("vmax/NCEP/ncep_landfall_vmax_ZerosRemoved.csv");
 xoh = temp.vstore100; 
 xoh_tot = length(xoh); 
 % Fit a distribution to the TC vmax
@@ -45,7 +45,7 @@ for i = 1:length(model_map)
     [xmh_fit, ~, mh_type] = fit_gpd(xmh, 15, 4); 
 
     % load future GCM track characteristics
-    fname = sprintf('vmax/CMIP6_585/%s_ssp585_landfall_vmax.csv', ...
+    fname = sprintf('vmax/CMIP6_585/%s_ssp585_landfall_vmax_ZerosRemoved.csv', ...
         model_map(i));
     temp = readtable(fname);
     tc_ids = temp.tc_id;
