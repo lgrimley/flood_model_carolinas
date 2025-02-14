@@ -13,6 +13,7 @@ mod_domain = cat.get_geodataframe(data_like='enc_domain_HUC6_clipped').to_crs(43
 ''' Processes TCR rainfall by basin '''
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis')
 ds = xr.open_dataset(r'.\rain\tc_precipitation_stats.nc').compute()
+# Load in the mask already created where the values of the cell is equal to the mod_domain index
 mask = xr.open_dataarray(r'.\rain\basin_mask_TCR.tif')
 selected_tcs = ds['tc_id']
 
