@@ -94,22 +94,22 @@ v = dep['band_data'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to
 gdf['gnd_elev'] = v.transpose()
 
 
-for storm in ['flor', 'floy', 'matt']:
-    name_prefix = f'{storm}_{scenario}'
+for storm in ['floy', 'matt']:
     # FLOOD PROCESS CLASSIFICATION
     # Present
     d = da_zsmax_class.sel(run=f'{storm}_pres')
     d = d.rename({list(d.keys())[0]:'class'})
     v = d['class'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-    gdf[f'{name_prefix}_hclass'] = v.transpose()
+    gdf[f'{storm}_hclass'] = v.transpose()
 
     # Future
     d = da_zsmax_ensmean_class.sel(run=f'{storm}_fut_ensmean')
     d= d.rename({list(d.keys())[0]:'class'})
     v = d['class'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-    gdf[f'{name_prefix}_pclass'] = v.transpose()
+    gdf[f'{storm}_pclass'] = v.transpose()
 
     for scenario in ['compound', 'runoff', 'coastal']:
+        name_prefix = f'{storm}_{scenario}'
         # PRESENT PEAK WATER LEVEL
         da_zsmax_pres = da_zsmax.sel(run=f'{storm}_pres_{scenario}')
         v = da_zsmax_pres['zsmax'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
@@ -125,7 +125,8 @@ for storm in ['flor', 'floy', 'matt']:
         gdf[f'{name_prefix}_pdepth'] = gdf[f'{name_prefix}_pzsmax'] - gdf['gnd_elev']
         gdf[f'{name_prefix}_hdepth'] = gdf[f'{name_prefix}_hzsmax'] - gdf['gnd_elev']
         gdf[f'{name_prefix}_depth_diff'] = gdf[f'{name_prefix}_pzsmax'] - gdf[f'{name_prefix}_hzsmax']
-
+        print(scenario)
+    print(storm)
 
 '''' Load in the data '''
 # Load the water level data for the historical return periods
@@ -157,8 +158,43 @@ colnames = [f'proj_T{T}' for T in h_aep.return_period.values]
 df.columns = colnames
 gdf = pd.concat(objs=[gdf, df], ignore_index=False)
 
-outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\buildings_tc_exposure.csv'
+outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp.csv'
 gdf.to_csv(outfile)
+
+fld_build = gdf[gdf[[
+       'flor_compound_hzsmax', 'flor_compound_pzsmax',
+       'flor_runoff_hzsmax', 'flor_runoff_pzsmax', 'flor_coastal_hzsmax',
+       'flor_coastal_pzsmax',
+       'floy_compound_hzsmax', 'floy_compound_pzsmax',
+       'floy_runoff_hzsmax', 'floy_runoff_pzsmax',  'floy_coastal_hzsmax',
+       'floy_coastal_pzsmax',
+       'matt_compound_hzsmax', 'matt_compound_pzsmax',
+       'matt_runoff_hzsmax', 'matt_runoff_pzsmax',  'matt_coastal_hzsmax',
+       'matt_coastal_pzsmax',
+        ]].notna().any(axis=1)]
+outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp_real.csv'
+fld_build.to_csv(outfile)
+
+fld_build = gdf[gdf[[
+       'flor_compound_hzsmax', 'flor_compound_pzsmax',
+       'flor_runoff_hzsmax', 'flor_runoff_pzsmax', 'flor_coastal_hzsmax',
+       'flor_coastal_pzsmax',
+       'floy_compound_hzsmax', 'floy_compound_pzsmax',
+       'floy_runoff_hzsmax', 'floy_runoff_pzsmax',  'floy_coastal_hzsmax',
+       'floy_coastal_pzsmax',
+       'matt_compound_hzsmax', 'matt_compound_pzsmax',
+       'matt_runoff_hzsmax', 'matt_runoff_pzsmax',  'matt_coastal_hzsmax',
+       'matt_coastal_pzsmax',
+       'hist_T1', 'hist_T2', 'hist_T5', 'hist_T10',
+       'hist_T25', 'hist_T30', 'hist_T50', 'hist_T100', 'hist_T200',
+       'hist_T250', 'hist_T500', 'hist_T1000', 'proj_T1', 'proj_T2', 'proj_T5',
+       'proj_T10', 'proj_T25', 'proj_T30', 'proj_T50', 'proj_T100',
+       'proj_T200', 'proj_T250', 'proj_T500', 'proj_T1000'
+        ]].notna().any(axis=1)]
+
+outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp_subset.csv'
+fld_build.to_csv(outfile)
+
 # '''
 # Subset the buildings based on flood depths - extract velocity, tmax, flood process classification
 # '''
