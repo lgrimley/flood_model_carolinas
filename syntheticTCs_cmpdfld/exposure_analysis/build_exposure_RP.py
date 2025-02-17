@@ -22,130 +22,66 @@ Get total buildings flooded for historical storms
 
 '''
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure')
-bld_tot_df_filpath = 'bld_fld_counts_FlorFloyMatt.csv'
+building_df = pd.read_csv('buildings_rps_exposure.csv', index_col=0, low_memory=True)
+print(building_df.columns)
+bld_tot_df_filpath = 'bld_fld_counts_rps.csv'
 if os.path.exists(bld_tot_df_filpath) is False:
-    building_df = pd.read_csv('buildings_tc_exposure_rp_real.csv', index_col=0, low_memory=True)
-    print(building_df.columns)
-
-    depth_thresholds = [0.1, 0.25, 0.5, 0.64, 1 , 1.5, 2]
-    storms = ['flor','floy','matt']
     building_totals = pd.DataFrame()
-    for depth_threshold in depth_thresholds:
-        for storm in storms:
-            fld_build = building_df[building_df[[f'{storm}_compound_hzsmax',
-                                                 f'{storm}_compound_pzsmax']].notna().all(axis=1)]
-            for clim in ['h', 'p']:
+    for T in [10, 25,100, 250, 500]:
+        fld_build = building_df[building_df[[f'hist_rp{T}_zsmax', f'fut_rp{T}_zsmax']].notna().all(axis=1)]
+        depth_thresholds = [0.1, 0.25, 0.5, 0.64, 1 , 1.5, 2]
+        for depth_threshold in depth_thresholds:
+            for clim in ['fut', 'hist']:
                 # Get the buildings that had a depth greater than the threshold for select climate
-                flooded = fld_build[fld_build[f'{storm}_compound_{clim}depth'] > depth_threshold]
+                flooded = fld_build[fld_build[f'{clim}_rp{T}_depth'] > depth_threshold]
 
                 # Count the classification of the flooding (runoff, coastal, compound)
-                codes, counts = np.unique(flooded[f'{storm}_{clim}class'], return_counts=True)
+                codes, counts = np.unique(flooded[f'{clim}_rp{T}_class'], return_counts=True)
 
                 # Save these totals to a dataframe
                 d = counts.tolist() + [clim, depth_threshold]
                 counts_df = pd.DataFrame(data=d, index=codes.tolist() + ['period','hmin'])
-                counts_df.columns = [f'{storm}_{clim}']
+                counts_df.columns = [f'{clim}_rp{T}']
 
                 # Append this dataframe to larger dataframe
                 building_totals = pd.concat(objs=[building_totals, counts_df], axis=1, ignore_index=False)
 
-
-    bld_tot_df = building_totals.T.drop(0.0, axis=1)
+    bld_tot_df = building_totals.T.drop(columns=0)
     bld_tot_df.columns = ['Coastal', 'Coastal-Comp', 'Runoff', 'Runoff-Comp', 'Period', 'hmin']
     bld_tot_df['Compound'] = bld_tot_df['Coastal-Comp'] + bld_tot_df['Runoff-Comp']
     bld_tot_df['Total'] = bld_tot_df['Compound']  + bld_tot_df['Coastal'] + bld_tot_df['Runoff']
-    bld_tot_df.loc[bld_tot_df['Period'] == 'h','Period'] = 'Present'
-    bld_tot_df.loc[bld_tot_df['Period'] == 'p','Period'] = 'Future'
-    bld_tot_df.to_csv('bld_fld_counts_FlorFloyMatt.csv')
+    bld_tot_df.loc[bld_tot_df['Period'] == 'hist','Period'] = 'Present'
+    bld_tot_df.loc[bld_tot_df['Period'] == 'fut','Period'] = 'Future'
+    bld_tot_df['RP'] = [x.split('_rp')[-1] for x in bld_tot_df.index]
+    bld_tot_df.to_csv('bld_fld_counts_rps.csv')
 else:
     bld_tot_df = pd.read_csv(bld_tot_df_filpath, index_col=0)
 
-# Pull in the flood extent data
-fld_extent = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\process_attribution_mask\stats_for_manuscript.csv',
-                         index_col=0)
-fld_extent_d1 = fld_extent[fld_extent.index.isin(['flor_pres','floy_pres','matt_pres'])][['Coastal', 'Runoff', 'Compound']]
-fld_extent_futmean = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\ensemble_mean_mask\ensmean_mean_fldArea_by_process.csv',
-                                 index_col=0)
-fld_extent_d2 = fld_extent_futmean.T
-fld_extent_d2['Compound'] = fld_extent_d2['compound_coastal'] + fld_extent_d2['compound_runoff']
-fld_extent_d2 = fld_extent_d2[['coastal','runoff','Compound']]
-fld_extent_d2.columns = ['Coastal','Runoff','Compound']
-fld_extent_d2['storm'] = ['flor','matt','floy']
-fld_extent_d2.set_index('storm', drop=True,inplace=True)
-fld_extent_d2.sort_index(axis=0, inplace=True)
 
-bld_tot_df['Storm'] = [x.split('_')[0] for x in bld_tot_df.index]
-storms = np.unique(bld_tot_df['Storm'])
-
-# Mean Absolute Error depth threshold
+storms = [10, 25, 100, 250, 500]
 subset = bld_tot_df[bld_tot_df['hmin'] == 0.64]
 d1 = subset[subset['Period']=='Present'][['Coastal', 'Runoff', 'Compound']]
 d2 = subset[subset['Period']=='Future'][['Coastal', 'Runoff', 'Compound']]
-
 colors = ['#3F5565', '#879BEE', '#DD7596']#, '#8EB897']
 bar_width = 0.3
 index = np.arange(len(storms))
-nrow, ncol = 1, 2
+nrow, ncol = 1, 1
 n_subplots = nrow * ncol
 first_in_row = np.arange(0, n_subplots, ncol)
 last_row = np.arange(n_subplots - ncol, n_subplots, 1)
-
-fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 3), layout='constrained')
-ax = axes[1]
+fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(5.5, 2.5), layout='constrained')
 bars1 = d2.plot(kind='bar', stacked=True, ax=ax, position=-0.05, width=bar_width,
                 legend=False, color=colors, align='center')
 bars2 = d1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width=bar_width,
                 color=colors, align='center')
 ax.set_xticks(index)
-ax.set_xlim(-0.5,2.5)
+ax.set_xlim(-0.5,4.5)
 ax.set_ylim(0,105000)
 ax.set_ylabel('No. of Buildings\nwhere Depth > 0.64m')
-ax.set_xticklabels(['Florence', 'Floyd', 'Matthew'], rotation=0)
-
-ax = axes[0]
-bars1 = fld_extent_d2.plot(kind='bar', stacked=True, ax=ax, position=-0.05, width=bar_width,
-                legend=False, color=colors, align='center')
-bars2 = fld_extent_d1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width=bar_width,
-                color=colors, align='center',legend=False)
-ax.set_xlabel('')
-ax.set_xticks(index)
-ax.set_xlim(-0.5,2.5)
-#ax.set_ylim(0,105000)
-ax.set_ylabel('Flood Extent (sq.km)')
-ax.set_xticklabels(['Florence', 'Floyd', 'Matthew'], rotation=0)
+ax.set_xticklabels(['10.0%','4.0%','1.0%', '0.4%', '0.2%'], rotation=0)
 plt.tight_layout()
-plt.savefig('flor_floy_matt_building_hmin0.64_extent_vs_exp.png', dpi=300)
+#plt.savefig('rps_building_exposure_hmin0.64.png', dpi=300)
 plt.close()
-
-# Mean Absolute Error depth threshold
-colors = ['#3F5565', '#879BEE', '#DD7596', '#8EB897']
-bar_width = 0.3
-index = np.arange(len(storms))
-fig, axes = plt.subplots(nrows=2, ncols=2, figsize=(6, 4), sharex=True, sharey=True)
-hmins = [0.1, 0.25, 0.5, 1]
-axes=axes.flatten()
-for i in range(len(hmins)):
-    hmin = hmins[i]
-    subset = bld_tot_df[bld_tot_df['hmin'] == hmin]
-
-    d1 = subset[subset['Period']=='Present'][['Coastal', 'Runoff', 'Coastal-Comp', 'Runoff-Comp']]
-    d2 = subset[subset['Period']=='Future'][['Coastal', 'Runoff', 'Coastal-Comp', 'Runoff-Comp']]
-    ax = axes[i]
-    bars1 = d2.plot(kind='bar', stacked=True, ax=ax, position=-0.05, width=bar_width,
-                    legend=False, color=colors, align='center')
-    if i == 3:
-        ax.legend(bbox_to_anchor=(2.05, 1), loc='upper left')
-    bars2 = d1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width=bar_width,
-                    legend = False, color=colors, align='center')
-    ax.set_xticks(index)
-    ax.set_title(f'Depth threshold: {hmin} m')
-    ax.set_xlim(-0.5,2.5)
-    ax.set_ylabel('No. of Buildings')
-    ax.set_xticklabels(['Florence', 'Floyd', 'Matthew'], rotation=0)
-plt.tight_layout()
-plt.savefig('flor_floy_matt_building_exposure_allHmin_split.png', dpi=300)
-plt.close()
-
 
 
 ''' 
@@ -180,32 +116,26 @@ if load_geo_layers is True:
     nc_major_rivers = nc_major_rivers.to_crs(mod.crs)
     nc_major_rivers_clip = nc_major_rivers.clip(mod.region)
 
-    # urban_areas = gpd.read_file(r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\2010_Census_Urban_Areas\2010_Census_Urban_Areas.shp').to_crs(32617)
-    # urban_areas = urban_areas.clip(mod.region)
 
-    # tc_tracks = cat.get_geodataframe(r'Z:\Data-Expansion\users\lelise\data\geospatial\hurricane_tracks\IBTrACS.NA.list'
-    #                                  r'.v04r00.lines\IBTrACS.NA.list.v04r00.lines.shp')
-    # tc_tracks.to_crs(epsg=32617, inplace=True)
-
-
-building_df = pd.read_csv('buildings_tc_exposure_rp_real.csv', index_col=0, low_memory=True)
+#building_df = pd.read_csv('buildings_rps_exposure.csv', index_col=0, low_memory=True)
 print(building_df.columns)
+
 depth_threshold=0.64
 data_plot = []
 var_plot = []
-for storm in storms:
-    fld_build = building_df[building_df[[f'{storm}_compound_hzsmax', f'{storm}_compound_pzsmax']].notna().all(axis=1)]
-    for clim in ['h', 'p']:
+for T in [100, 250, 500]:
+    fld_build = building_df[building_df[[f'hist_rp{T}_zsmax', f'fut_rp{T}_zsmax']].notna().all(axis=1)]
+    for clim in ['hist', 'fut']:
         # Reclass the compound
-        fld_build_sub = fld_build[fld_build[f'{storm}_compound_{clim}depth'] > depth_threshold]
-        colname = f'{storm}_{clim}class'
+        fld_build_sub = fld_build[fld_build[f'{clim}_rp{T}_depth'] > depth_threshold]
+        colname = f'{clim}_rp{T}_class'
         fld_build_sub.loc[fld_build_sub[colname] == 2.0, colname] = 5.0
         fld_build_sub.loc[fld_build_sub[colname] == 4.0, colname] = 5.0
 
         data_plot.append(fld_build_sub)
         var_plot.append(colname)
 
-storms_label = ['Florence', 'Floyd', 'Matthew']
+storms_label = ['1.0%', '0.4%', '0.2%']
 nrow = 3
 ncol = 2
 n_subplots = nrow * ncol
@@ -213,7 +143,6 @@ first_in_row = np.arange(0, n_subplots, ncol)
 last_in_row = np.arange(ncol - 1, n_subplots, ncol)
 first_row = np.arange(0, ncol)
 last_row = np.arange(first_in_row[-1], n_subplots, 1)
-
 
 mincnt = 3
 gridsize = 700
@@ -251,17 +180,16 @@ pos0 = axs[3].get_position()  # get the original position
 cax1 = fig.add_axes([pos0.x1 + 0.1 , pos0.y0 , 0.03, pos0.height * 1.1])
 cbar1 = fig.colorbar(hb, cax=cax1, orientation='vertical', ticks=[1, 3, 5])
 cbar1.ax.set_yticklabels(labels=['Coastal', 'Runoff', 'Compound'])
-axs[0].set_title('Present')
-axs[1].set_title('Future (4C)')
+axs[0].set_title('Historic (1980-2005)')
+axs[1].set_title('Future (2070-2100)')
 for i in range(len(first_in_row)):
     axs[first_in_row[i]].text(-0.05, 0.5, storms_label[i],
                                horizontalalignment='right',
                                verticalalignment='center',
                                rotation='vertical',
                                transform=axs[first_in_row[i]].transAxes)
-
 plt.subplots_adjust(wspace=0.0, hspace=0.0)
 plt.margins(x=0, y=0)
-plt.savefig(f'hexbin_mincnt{mincnt}_gridsize{gridsize}_map_florfloymatt_hmin{depth_threshold}_mean2.jpg', dpi=300, bbox_inches='tight')
+#plt.savefig(f'hexbin_mincnt{mincnt}_gridsize{gridsize}_map_100yr_hmin{depth_threshold}_rps.jpg', dpi=300, bbox_inches='tight')
 plt.close()
 

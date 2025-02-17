@@ -34,26 +34,35 @@ dem = mod.grid['dep']
 wb_mask = mod.data_catalog.get_rasterdataset(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\waterbody_mask.nc')
 sel_rp = h_aep['return_period'].values
 d_plot = []
+da_attr_list_hist = []
+da_attr_list_proj = []
 combined_df = pd.DataFrame()
 for T in sel_rp:
     h = h_aep.sel(return_period=T)
-    h = h.where(wb_mask == 1)
+    #h = h.where(wb_mask == 1)
     da_single_max = h.sel(scenario=['runoff', 'coastal']).max('scenario')
     da_diff_h = (h.sel(scenario='compound') - da_single_max).compute()
     da_diff_h.name = 'zsmax_diff'
     da_class = classify_zsmax_by_process(da=h, da_diff=da_diff_h, hmin= 0.05)
+    da_attr_list_hist.append(da_class)
     fld_area_h = calculate_flooded_area_by_process(da = da_class['zsmax_attr'], tc_index=T).T
     fld_area_h.columns = [f'hist_{T}']
 
     p = p_aep.sel(return_period=T)
-    p = p.where(wb_mask == 1)
+    #p = p.where(wb_mask == 1)
     da_single_max = p.sel(scenario=['runoff', 'coastal']).max('scenario')
     da_diff_p = (p.sel(scenario='compound') - da_single_max).compute()
     da_diff_p.name = 'zsmax_diff'
     da_class_p = classify_zsmax_by_process(da=p, da_diff=da_diff_p, hmin= 0.05)
+    da_attr_list_proj.append(da_class_p)
     fld_area_p = calculate_flooded_area_by_process(da = da_class_p['zsmax_attr'], tc_index=T).T
     fld_area_p.columns = [f'proj_{T}']
 
     combined_df = pd.concat(objs=[combined_df, fld_area_h, fld_area_p], axis=1, ignore_index=False)
 #combined_df.round(2).to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\aep_extent_rel_contribution_Wbmasked.csv' )
 
+hist_attr_da = xr.concat(objs=da_attr_list_hist, dim='return_period')
+proj_attr_da = xr.concat(objs=da_attr_list_proj, dim='return_period')
+
+hist_attr_da.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\results_aep\ncep_RP_attribution.nc')
+proj_attr_da.to_netcdf(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\results_aep\gcm_RP_attribution.nc')

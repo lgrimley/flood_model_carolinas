@@ -92,6 +92,8 @@ Extract model output at buildings
 # GROUND ELEVATION
 v = dep['band_data'].sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
 gdf['gnd_elev'] = v.transpose()
+#small_file = gdf[['BLDG_ID','PID','xcoords','ycoords', 'gnd_elev']]
+#small_file.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_within_domain.csv')
 
 
 for storm in ['floy', 'matt']:
@@ -128,39 +130,6 @@ for storm in ['floy', 'matt']:
         print(scenario)
     print(storm)
 
-'''' Load in the data '''
-# Load the water level data for the historical return periods
-histdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\ncep\aep'
-file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
-scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
-da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
-h_aep = xr.concat(objs=da_list, dim='scenario')
-h_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
-
-da_zsmax_fut = h_aep.sel(scenario=f'compound')
-v = da_zsmax_fut.sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-df = pd.DataFrame(v.T)
-colnames = [f'hist_T{T}' for T in h_aep.return_period.values]
-df.columns = colnames
-gdf = pd.concat(objs=[gdf, df], ignore_index=False)
-
-# Load the water level data for the projected return periods
-projdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\canesm_ssp585\aep'
-file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
-da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
-p_aep = xr.concat(objs=da_list, dim='scenario')
-p_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
-
-da_zsmax_fut = p_aep.sel(scenario=f'compound')
-v = da_zsmax_fut.sel(x=gdf['geometry'].x.to_xarray(), y=gdf['geometry'].y.to_xarray(), method='nearest').values
-df = pd.DataFrame(v.T)
-colnames = [f'proj_T{T}' for T in h_aep.return_period.values]
-df.columns = colnames
-gdf = pd.concat(objs=[gdf, df], ignore_index=False)
-
-outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp.csv'
-gdf.to_csv(outfile)
-
 fld_build = gdf[gdf[[
        'flor_compound_hzsmax', 'flor_compound_pzsmax',
        'flor_runoff_hzsmax', 'flor_runoff_pzsmax', 'flor_coastal_hzsmax',
@@ -175,25 +144,6 @@ fld_build = gdf[gdf[[
 outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp_real.csv'
 fld_build.to_csv(outfile)
 
-fld_build = gdf[gdf[[
-       'flor_compound_hzsmax', 'flor_compound_pzsmax',
-       'flor_runoff_hzsmax', 'flor_runoff_pzsmax', 'flor_coastal_hzsmax',
-       'flor_coastal_pzsmax',
-       'floy_compound_hzsmax', 'floy_compound_pzsmax',
-       'floy_runoff_hzsmax', 'floy_runoff_pzsmax',  'floy_coastal_hzsmax',
-       'floy_coastal_pzsmax',
-       'matt_compound_hzsmax', 'matt_compound_pzsmax',
-       'matt_runoff_hzsmax', 'matt_runoff_pzsmax',  'matt_coastal_hzsmax',
-       'matt_coastal_pzsmax',
-       'hist_T1', 'hist_T2', 'hist_T5', 'hist_T10',
-       'hist_T25', 'hist_T30', 'hist_T50', 'hist_T100', 'hist_T200',
-       'hist_T250', 'hist_T500', 'hist_T1000', 'proj_T1', 'proj_T2', 'proj_T5',
-       'proj_T10', 'proj_T25', 'proj_T30', 'proj_T50', 'proj_T100',
-       'proj_T200', 'proj_T250', 'proj_T500', 'proj_T1000'
-        ]].notna().any(axis=1)]
-
-outfile = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\buildings_tc_exposure_rp_subset.csv'
-fld_build.to_csv(outfile)
 
 # '''
 # Subset the buildings based on flood depths - extract velocity, tmax, flood process classification
