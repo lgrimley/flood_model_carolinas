@@ -303,7 +303,7 @@ def process_tmax_in_hours(tmax: xr.DataArray, time_min_hr: int = 0) -> xr.DataAr
     return tmax
 
 
-def calculate_flooded_area_by_process(da: xr.DataArray, tc_index: int):
+def calculate_flooded_area_by_process(da: xr.DataArray, tc_index: int=0):
     unique_codes, cell_counts = np.unique(da.data, return_counts=True)
     fld_area1 = cell_counts.copy()
     res = 200  # grid cell resolution in meters
