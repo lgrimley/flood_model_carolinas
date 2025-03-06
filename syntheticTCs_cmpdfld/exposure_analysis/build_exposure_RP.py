@@ -58,27 +58,70 @@ else:
     bld_tot_df = pd.read_csv(bld_tot_df_filpath, index_col=0)
 
 
-storms = [10, 25, 100, 250, 500]
+# Flood extent
+fld_extent = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\results_attribution\aep_extent_rel_contribution_Wbmasked.csv',
+                                 index_col=0)
+fld_extent = fld_extent.T
+fld_extent = fld_extent[['Coastal','Runoff','Compound']]
+
+fld_extent['rp'] = [int(x.split('_')[-1]) for x in fld_extent.index]
+fld_extent['period'] = [x.split('_')[0] for x in fld_extent.index]
+fld_extent.set_index('rp', drop=True,inplace=True)
+
+
+storms = [100, 250, 500]
 subset = bld_tot_df[bld_tot_df['hmin'] == 0.64]
 d1 = subset[subset['Period']=='Present'][['Coastal', 'Runoff', 'Compound']]
+d1 = d1[2:]
+tot1 = d1.sum(axis=1)
+rc1 = d1.div(tot1, axis=0)
 d2 = subset[subset['Period']=='Future'][['Coastal', 'Runoff', 'Compound']]
+d2 = d2[2:]
+tot2 = d2.sum(axis=1)
+rc2 = d2.div(tot2, axis=0)
+
+fld_extent1 = fld_extent[fld_extent['period'] == 'hist']
+fld_extent1 = fld_extent1[fld_extent1.index.isin(storms)][['Coastal', 'Runoff', 'Compound']]
+tot1 = fld_extent1.sum(axis=1)
+rc_fld1 = fld_extent1.div(tot1, axis=0)
+fld_extent2 = fld_extent[fld_extent['period'] == 'proj']
+fld_extent2 = fld_extent2[fld_extent2.index.isin(storms)][['Coastal', 'Runoff', 'Compound']]
+tot2 = fld_extent2.sum(axis=1)
+rc_fld2 = fld_extent2.div(tot2, axis=0)
+
 colors = ['#3F5565', '#879BEE', '#DD7596']#, '#8EB897']
 bar_width = 0.3
 index = np.arange(len(storms))
-nrow, ncol = 1, 1
+nrow, ncol = 1, 2
 n_subplots = nrow * ncol
 first_in_row = np.arange(0, n_subplots, ncol)
 last_row = np.arange(n_subplots - ncol, n_subplots, 1)
-fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(5.5, 2.5), layout='constrained')
+fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 3), layout='constrained',
+                         sharey=False, sharex=True)
+
+ax = axes[0]
+bars1 = fld_extent2.plot(kind='bar', stacked=True, ax=ax, position=-0.05, width=bar_width, #edgecolor='red',
+                legend=False, color=colors, align='center')
+bars2 = fld_extent1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width=bar_width, #edgecolor='black',
+                color=colors, align='center', legend=False)
+ax.set_xticks(index)
+ax.set_xlabel('')
+ax.set_xlim(-0.5,2.5)
+ax.set_ylim(0,80000)
+ax.set_ylabel('Flood Extent (sq.km.)')
+ax.set_xticklabels(['1.0%', '0.4%', '0.2%'], rotation=0)
+
+ax = axes[1]
 bars1 = d2.plot(kind='bar', stacked=True, ax=ax, position=-0.05, width=bar_width,
                 legend=False, color=colors, align='center')
 bars2 = d1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width=bar_width,
                 color=colors, align='center')
 ax.set_xticks(index)
-ax.set_xlim(-0.5,4.5)
+ax.set_xlabel('')
+ax.set_xlim(-0.5,2.5)
 ax.set_ylim(0,105000)
 ax.set_ylabel('No. of Buildings\nwhere Depth > 0.64m')
-ax.set_xticklabels(['10.0%','4.0%','1.0%', '0.4%', '0.2%'], rotation=0)
+ax.set_xticklabels(['1.0%', '0.4%', '0.2%'], rotation=0)
 plt.tight_layout()
 #plt.savefig('rps_building_exposure_hmin0.64.png', dpi=300)
 plt.close()
@@ -134,7 +177,21 @@ for T in [100, 250, 500]:
 
         data_plot.append(fld_build_sub)
         var_plot.append(colname)
+    break
 
+a0 = fld_build
+a1 = data_plot[0]
+a2 = data_plot[1]
+
+b0 = a2[a2[f'hist_rp100_depth'] < depth_threshold]
+v, counts = np.unique(b0[f'fut_rp100_class'], return_counts=True)
+
+b1 = a2[a2[f'hist_rp100_depth'] > depth_threshold]
+v, counts = np.unique(b1[f'fut_rp100_class'], return_counts=True)
+v2, counts2 = np.unique(b1[f'hist_rp100_class'], return_counts=True)
+
+
+# plotting
 storms_label = ['1.0%', '0.4%', '0.2%']
 nrow = 3
 ncol = 2

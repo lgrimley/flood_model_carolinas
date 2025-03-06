@@ -59,7 +59,7 @@ for T in sel_rp:
     fld_area_p.columns = [f'proj_{T}']
 
     combined_df = pd.concat(objs=[combined_df, fld_area_h, fld_area_p], axis=1, ignore_index=False)
-#combined_df.round(2).to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\aep_extent_rel_contribution_Wbmasked.csv' )
+combined_df.round(2).to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS\results_attribution\aep_extent_rel_contribution_Wbmasked.csv' )
 
 hist_attr_da = xr.concat(objs=da_attr_list_hist, dim='return_period')
 proj_attr_da = xr.concat(objs=da_attr_list_proj, dim='return_period')

@@ -83,6 +83,48 @@ d1 = subset[subset['Period']=='Present'][['Coastal', 'Runoff', 'Compound']]
 d2 = subset[subset['Period']=='Future'][['Coastal', 'Runoff', 'Compound']]
 
 colors = ['#3F5565', '#879BEE', '#DD7596']#, '#8EB897']
+combined = pd.concat(objs=[d1, d2], axis=0, ignore_index=False)
+
+# PIE CHART
+nrow, ncol = 1, 1
+n_subplots = nrow * ncol
+first_in_row = np.arange(0, n_subplots, ncol)
+last_row = np.arange(n_subplots - ncol, n_subplots, 1)
+fig, axs = plt.subplots(nrows=nrow,
+                        ncols=ncol,
+                        figsize=(6, 6),
+                        tight_layout=True,
+                        layout='constrained'
+                        )
+axs = axs.flatten()
+for i in range(len(combined.index)):
+    ax = axs[i]
+    d = combined[combined.index == combined.index[i]]
+    wedges, texts, autotexts = ax.pie(d.to_numpy()[0],
+           colors=colors,
+           radius=pie_scale[pie_scale.index == combined.index[i]][0],
+           startangle=90,
+           autopct='%1.0f%%',#pctdistance=0.5
+           )
+    theta = [((w.theta2 + w.theta1) / 2) / 180 * np.pi for w in wedges]
+    if i <2:
+        adjust_labels(texts, theta, 1.3)
+        adjust_labels(autotexts, theta, 0.6)
+
+axs[0].set_title('Present')
+axs[1].set_title('Future')
+legend_kwargs0 = dict(
+    bbox_to_anchor=(0.9, 1.2),
+    title=None,
+    loc="upper right",
+    frameon=True,
+    prop=dict(size=10),
+)
+axs[4].legend(labels=combined.columns, **legend_kwargs0)
+plt.subplots_adjust(wspace=0.0, hspace=0.0)
+plt.margins(x=0, y=0)
+
+# BAR CHART
 bar_width = 0.3
 index = np.arange(len(storms))
 nrow, ncol = 1, 2
@@ -110,11 +152,11 @@ bars2 = fld_extent_d1.plot(kind='bar', stacked=True, ax=ax, position=1.05, width
 ax.set_xlabel('')
 ax.set_xticks(index)
 ax.set_xlim(-0.5,2.5)
-#ax.set_ylim(0,105000)
+ax.set_ylim(0,80000)
 ax.set_ylabel('Flood Extent (sq.km)')
 ax.set_xticklabels(['Florence', 'Floyd', 'Matthew'], rotation=0)
 plt.tight_layout()
-plt.savefig('flor_floy_matt_building_hmin0.64_extent_vs_exp.png', dpi=300)
+#plt.savefig('flor_floy_matt_building_hmin0.64_extent_vs_exp.png', dpi=300)
 plt.close()
 
 # Mean Absolute Error depth threshold
@@ -143,7 +185,7 @@ for i in range(len(hmins)):
     ax.set_ylabel('No. of Buildings')
     ax.set_xticklabels(['Florence', 'Floyd', 'Matthew'], rotation=0)
 plt.tight_layout()
-plt.savefig('flor_floy_matt_building_exposure_allHmin_split.png', dpi=300)
+#plt.savefig('flor_floy_matt_building_exposure_allHmin_split.png', dpi=300)
 plt.close()
 
 
@@ -166,7 +208,7 @@ da = mod.grid['dep']
 wkt = da.raster.crs.to_wkt()
 utm_zone = da.raster.crs.to_wkt().split("UTM zone ")[1][:3]
 utm = ccrs.UTM(int(utm_zone[:2]), "S" in utm_zone)
-load_geo_layers = True
+load_geo_layers = False
 if load_geo_layers is True:
     coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
     coastal_wb = coastal_wb.to_crs(mod.crs)
@@ -204,7 +246,92 @@ for storm in storms:
 
         data_plot.append(fld_build_sub)
         var_plot.append(colname)
+    break
 
+
+a1 = data_plot[0]
+a2 = data_plot[1]
+
+# these are buildings exposed in the future but not in the present
+b0 = a2[a2[f'{storm}_compound_hdepth'] < depth_threshold]
+print(len(b0))
+v, counts = np.unique(b0[f'{storm}_pclass'], return_counts=True)
+
+# buildings flooded in both
+b1 = a2[a2[f'{storm}_compound_hdepth'] > depth_threshold]
+print(len(b1))
+v, countsh = np.unique(b1[f'{storm}_hclass'], return_counts=True)
+v2, countsp = np.unique(b1[f'{storm}_pclass'], return_counts=True)
+
+# When does compound flood but runoff and coastal do not
+compound_build_exp = pd.DataFrame()
+compound_build_dep= pd.DataFrame()
+ids = []
+ground_elev_df = pd.DataFrame()
+for storm in ['flor', 'floy', 'matt']:
+    for clim in ['h','p']:
+        if clim == 'h':
+            df = a1
+        else:
+            df = a2
+        comp_fld = df[df[f'{storm}_compound_{clim}depth'] > depth_threshold]
+        colname = f'{storm}_{clim}class'
+        comp_fld.loc[comp_fld[colname] == 2.0, colname] = 5.0
+        comp_fld.loc[comp_fld[colname] == 4.0, colname] = 5.0
+        #comp_fld_only = comp_fld[(comp_fld[f'{storm}_runoff_{clim}depth'] < depth_threshold) & (comp_fld[f'{storm}_coastal_{clim}depth'] < depth_threshold)]
+        #depths = comp_fld_only[f'{storm}_compound_{clim}depth'] - depth_threshold
+        comp_fld_sub = comp_fld[(comp_fld[colname] == 5)]
+        ground_elev_df = pd.concat([ground_elev_df,comp_fld_sub['gnd_elev']], axis=1, ignore_index=True)
+
+        d_above_max = comp_fld[f'{storm}_compound_{clim}depth'] - comp_fld[[f'{storm}_runoff_{clim}depth', f'{storm}_coastal_{clim}depth']].max(axis=1)
+        depths = d_above_max[d_above_max > 0.05]
+
+        stats = pd.DataFrame(depths.describe(percentiles=[0.05,0.1,0.25,0.5,0.75,0.9,0.95]))
+        compound_build_exp = pd.concat(objs=[compound_build_exp, stats], axis=1, ignore_index=False)
+
+        t = pd.DataFrame(depths).reset_index(drop=True)
+        ids.append(t.columns.item())
+        compound_build_dep = pd.concat(objs=[compound_build_dep, t], axis=1, ignore_index=True)
+
+#compound_build_exp.to_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\historical_storms\compound_dep_increase_all.csv')
+compound_build_dep.columns = ids
+ground_elev_df.columns = ids
+
+#ground_elev_df[ground_elev_df < 0] = np.nan
+
+compound_build_dep2 = ground_elev_df.T
+compound_build_dep2['storm'] = ['Flor', 'Flor','Floy', 'Floy','Matt','Matt']
+compound_build_dep2['climate'] = ['Hist','Fut','Hist','Fut','Hist','Fut']
+compound_build_dep2_melted = compound_build_dep2.melt(id_vars=['storm','climate'],var_name='depth_index', value_name='depth')
+
+
+import seaborn as sns
+fig, ax = plt.subplots(figsize=(5, 3.5))
+sns.boxplot(data=compound_build_dep2_melted, x='storm', y='depth', hue='climate',
+            ax=ax,
+            log_scale=False, palette={'Hist': 'silver', 'Fut': 'grey'},
+            gap=0.1, order=None, flierprops={'marker': '.'})
+ax.legend(frameon=False, title=None)
+ax.set_ylabel('Ground Elevation (m+NAVD88)')
+ax.set_xlabel('')
+ax.set_ylim(-16, 30)
+counts = compound_build_dep2_melted.groupby(['storm', 'climate'])['depth'].count()
+
+# Annotate each boxplot with the count of points
+for i, storm in enumerate(compound_build_dep2['storm'].unique()):
+    for j, climate in enumerate(compound_build_dep2['climate'].unique()):
+        count = counts.loc[(storm, climate)]
+        if j == 0:
+            ad = -0.2
+        else:
+            ad = 0.05
+        # Add text annotation to the boxplot
+        ax.text(i + j * 0.2 + ad, -15, f'N={count}', ha='center', va='bottom', fontsize=10, color='black')
+
+plt.savefig(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\historical_storms\compound_gndElev_aboveMaxIndiv_boxplot.png')
+plt.close()
+
+# Plotting map hexbin below
 storms_label = ['Florence', 'Floyd', 'Matthew']
 nrow = 3
 ncol = 2
