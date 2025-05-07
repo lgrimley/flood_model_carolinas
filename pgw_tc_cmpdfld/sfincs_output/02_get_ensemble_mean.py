@@ -4,15 +4,15 @@ sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\pgw_tc_
 from pgw_utils import *
 
 # Analysis directory
-workdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_3'
-da_zsmax = xr.open_dataset(os.path.join(workdir, 'pgw_zsmax.nc'))
+workdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final'
+da_zsmax = xr.open_dataset(os.path.join(workdir, 'da_zsmax_all.nc'))
 
 ''' Calculate SFINCS ensemble mean/max water levels '''
 storms = ['flor', 'matt', 'floy']
 scenarios = ['coastal', 'runoff', 'compound']
 for ntype in ['mean', 'max']:
     # Output directory
-    out_dir = os.path.join(workdir, f'ensemble_{ntype}')
+    out_dir = os.path.join(workdir, f'ensemble_{ntype}_slr')
     if os.path.exists(out_dir) is False:
         os.makedirs(out_dir)
 
@@ -23,7 +23,7 @@ for ntype in ['mean', 'max']:
         for climate in ['fut']:
             for scenario in scenarios:
                 ''' Calculate the ensemble mean/max '''
-                da_ensemble = summarize_ensemble(da_zsmax=da_zsmax,
+                da_ensemble, selected_ids = summarize_ensemble(da_zsmax=da_zsmax,
                                                  storm=storm,
                                                  climate=climate,
                                                  scenario=scenario,
@@ -38,3 +38,4 @@ for ntype in ['mean', 'max']:
     da_ensmean = xr.concat(ensemble_da_list, dim='run')
     da_ensmean['run'] = xr.IndexVariable('run', run_ids)
     da_ensmean.to_netcdf(os.path.join(out_dir, f'fut_ensemble_zsmax_{ntype}.nc'))
+

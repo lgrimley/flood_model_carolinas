@@ -24,16 +24,28 @@ os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_Syn
 
 run_group = 'canesm_ssp585'
 foldname = 'CMIP6_585'
-group_size = 125
+group_size = 20
 
-root = Path(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\{run_group}_runs\completed_runs')
+root = Path(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\{run_group}_runs\completed_runs_SLR112cm')
+
+'''
+All storms
+'''
+
+'''
+All storms
+'''
 # These are landfall vmax
 tc_ids_vmax = pd.read_csv(fr'.\02_DATA\{foldname}\tracks\landfall_vmax\adcirc_tcs\{run_group}_landfall_vmax.csv', index_col=0)
+
 # But these are the storms we actually have ADCIRC data for
 correct = pd.read_csv(fr'.\02_DATA\{foldname}\stormTide\gage_peaks_ZerosRemoved_{run_group}.csv',index_col=0)
-# So take only the TC IDs of the storms we care about and have runs for
+
+# So take only the TC IDs of the storms we care about and have runs for, sort them by the landfall windspeed
 selected = tc_ids_vmax[tc_ids_vmax['tc_id'].isin(correct.index)]
 tc_ids_vmax_ordered = selected.sort_values(by='vstore100', ascending=True)
+
+# Split them into groups for writting to netcdfs
 groups = [tc_ids_vmax_ordered[i:i + group_size] for i in range(0, len(tc_ids_vmax_ordered), group_size)]
 
 outputdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS'
