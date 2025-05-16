@@ -87,11 +87,13 @@ def get_depth_extent_stats(hmax_da: xr.DataArray, run_id, attr_da: xr.DataArray=
 
 
 
-wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS'
+#wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS'
+wdir = r'/projects/sfincs/syntheticTCs_cmpdfld/MODEL_OUTPUTS'
 os.chdir(wdir)
 
 # Read in the data catalog to get the model and basin geom
-data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Carolinas.yml'
+#data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Carolinas.yml'
+data_catalog_yml = r'/projects/sfincs/data/data_catalog_SFINCS_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml])
 # Read in the data catalog to get the model and basin geom
 basins = cat.get_geodataframe(data_like=r'./masks/basins_shp/huc6_basins.shp')
@@ -103,7 +105,9 @@ res = 20
 hmin = 0.05
 
 '''' Create basin and water body masks if they don't exist '''
-elevation_file = rf'..\03_MODEL_RUNS\subgrid\dep_subgrid_{res}m.tif'
+#elevation_file = rf'..\03_MODEL_RUNS\subgrid\dep_subgrid_{res}m.tif'
+elevation_file = rf'./subgrid/dep_subgrid_{res}m.tif'
+
 water_mask = rf'./masks/water_mask_sbgRes{res}m.tif'
 if os.path.exists(water_mask) is False:
     dep = cat.get_rasterdataset(elevation_file)
@@ -142,8 +146,8 @@ basin_mask = cat.get_rasterdataset(basin_mask, crs=32617, chunks=chunks_size, ge
 wb_mask.rio.write_crs(32617, inplace=True)
 basin_mask.rio.write_crs(32617, inplace=True)
 
-for clim in ['ncep','canesm_ssp585']:
-    for process in ['runoff', 'coastal', 'compound']:
+for clim in ['ncep', 'canesm_ssp585']:
+    for process in ['runoff', 'coastal']:
         start_time = time.time()
         csv_path = fr'./{clim}/aep/{clim}_AEP_floodStats_{process}_sbgRes{res}m_hmin{hmin}m.csv'
 
@@ -164,7 +168,7 @@ for clim in ['ncep','canesm_ssp585']:
         counter = 0
         mdf_stats = pd.DataFrame()
         rps = zsmax_ds['return_period'].values
-        for rp in [10, 25, 50, 100, 250]:
+        for rp in [100]: #[10, 25, 50, 100, 250]:
             # Selected run, mask out data beyond the shapefile
             zsmax_da = zsmax_ds.sel(return_period=rp)
             attr_da = attr_ds.sel(return_period=rp)['zsmax_attr']
@@ -219,7 +223,7 @@ for clim in ['ncep','canesm_ssp585']:
 
             # print('Writing downscaled flood depths to raster...')
             if rp == 100:
-                hmax_masked.raster.to_raster(fr'./{clim}/aep/floodmaps_{res}m/{clim}_RP{rp}_{process}_hmax_sbgRes{res}m.tif', nodata=np.nan)
+                hmax_masked.raster.to_raster(fr'./{clim}/aep/{clim}_RP{rp}_{process}_hmax_sbgRes{res}m.tif', nodata=np.nan)
 
             mdf1 = get_depth_extent_stats(hmax_da=hmax_masked, attr_da=attr_masked, run_id=f'RP{rp}_Domain', res=res)
             mdf_stats = pd.concat(objs=[mdf_stats, mdf1], axis=0, ignore_index=False)
