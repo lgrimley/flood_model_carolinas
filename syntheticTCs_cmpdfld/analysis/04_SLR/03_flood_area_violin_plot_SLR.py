@@ -64,7 +64,7 @@ if plot_SLR_violin is True:
     mpl.rcParams["figure.autolayout"] = True
 
     # Create a figure with GridSpec
-    fig = plt.figure(figsize=(8, 6))  # Set figure size
+    fig = plt.figure(figsize=(7, 7))  # Set figure size
     gs = fig.add_gridspec(len(scenarios), 3, width_ratios=[3, 1, 0], height_ratios=[1, 1, 1, 1])
     # Iterate through the scenarios and plot
     for i in range(len(scenarios)):
@@ -79,7 +79,7 @@ if plot_SLR_violin is True:
         df_long_basin = df_long[df_long['basin'] != 'Domain']
 
         # Create axes using GridSpec
-        yaxis_lim = [(-100, 6000), (-100, 3000), (-100, 2600), (-100, 8000)]
+        yaxis_lim = [(-100, 6000), (-100, 2700), (-100, 2000), (-100, 8000)]
         basin_order = ['LPD', 'CapeFear', 'OnslowBay', 'Neuse', 'Pamlico']
         ax1 = fig.add_subplot(gs[i, 0])  # First column (2/3 of the space)
         sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_basin,
@@ -106,8 +106,8 @@ if plot_SLR_violin is True:
             for jj, period in enumerate(['NoSLR', 'SLR']):
                 subset = df_long_basin[(df_long_basin['basin'] == basin) & (df_long_basin['Period'] == period)]
                 if not subset.empty:
-                    p5 = np.percentile(subset['data_value'], 5)
-                    p95 = np.percentile(subset['data_value'], 95)
+                    p10 = np.percentile(subset['data_value'], 10)
+                    p90 = np.percentile(subset['data_value'], 90)
                     median = np.percentile(subset['data_value'], 50)
 
                     # X-position adjustment for split violin
@@ -115,7 +115,7 @@ if plot_SLR_violin is True:
                     x = ii + offset
 
                     # Draw whisker line from 5th to 95th percentile
-                    ax1.plot([x, x], [p5, p95], color='black', lw=2, zorder=2)
+                    ax1.plot([x, x], [p10, p90], color='black', lw=2, zorder=2)
 
                     # Draw a horizontal line for the median
                     ax1.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
@@ -181,7 +181,8 @@ if plot_SLR_violin is True:
         ax2.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)
         ax2.get_legend().set_visible(False)
         ax2.set_xlabel('')
-        ax2.set_ylabel('Area (sq. km.)')
+        ax2.set_ylabel('')#ylabels[i])
+        ax2.yaxis.label.set_visible(False)
         ax2.set_title('')
 
 

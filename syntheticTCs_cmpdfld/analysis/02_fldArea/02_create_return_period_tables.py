@@ -37,7 +37,7 @@ def cleanup_meteo_tables(wind_df: pd.DataFrame, rain_df: pd.DataFrame, aoi: str=
     return meteo_df
 
 
-def cleanup_flood_tables1(tables_dir: str=None):
+def cleanup_flood_tables(tables_dir: str=None):
 
     csvfiles = [f for f in os.listdir(tables_dir) if f.endswith('.csv')]
     df = pd.concat((pd.read_csv(os.path.join(tables_dir, file), index_col=0) for file in csvfiles), ignore_index=False)
@@ -67,7 +67,7 @@ def cleanup_flood_tables1(tables_dir: str=None):
     return df_pivoted
 
 
-def cleanup_flood_tables2(tables_dir: str=None):
+def cleanup_flood_tables_old(tables_dir: str=None):
     csvfiles = [f for f in os.listdir(tables_dir) if f.endswith('.csv')]
     df = pd.concat((pd.read_csv(os.path.join(tables_dir, file), index_col=0) for file in csvfiles), ignore_index=False)
     df.index = df.index.str.replace(' ', '', regex=False)
@@ -152,139 +152,155 @@ def calc_exceedance_probabilities(data: pd.DataFrame, vars: list=None, n_storms:
 
 
 
-def get_peakStormTide_at_AOI(aoi: str=None, stormtide_csv: str=None):
+def get_peakStormTide_at_AOI(aoi: str=None, stormtide_csv: str=None, stormtide_mapdict: dict=None):
     stormtide_df = pd.read_csv(stormtide_csv, index_col=0)
+    stormtide_locs = stormtide_mapdict[aoi]
 
-    stormtide_pt = [None, '188', '194', '198', '204', '206']
-    stormtide_basin = ['Domain', 'LowerPeeDee', 'CapeFear', 'OnslowBay', 'Neuse', 'Pamlico']
-    map = pd.DataFrame([stormtide_pt, stormtide_basin]).T
-    map.columns = ['Loc', 'Basin']
-
-    stormtide_loc = map.loc[map['Basin'] == aoi, 'Loc']
-    if stormtide_loc.item() is None:
+    if stormtide_locs is None:
         basin_st = stormtide_df.max(axis=1)
-        basin_st.index = basin_st.index.astype(int)
-        basin_st = basin_st.round(2)
-        df = pd.DataFrame(basin_st, columns=['stormtide'])
     else:
-        basin_st = stormtide_df[stormtide_loc]
-        basin_st.index = basin_st.index.astype(int)
-        df = basin_st.round(2)
-        df.columns = ['stormtide']
+        basin_st = stormtide_df[stormtide_locs]
+        basin_st = basin_st.max(axis=1)
 
-    return df
+    basin_st = pd.DataFrame(basin_st)
+    basin_st.index = basin_st.index.astype(int)
+    basin_st = basin_st.round(2)
+    basin_st.columns = ['stormtide']
+
+    return basin_st
 
 
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs')
+outdir = r'.\05_ANALYSIS\01_return_period_tables'
+stormtide_mapdict = {'Domain': None,
+                     'LowerPeeDee': ['187', '188', '189', '190', '191', '192'],
+                     'CapeFear': ['193', '194', '195'],
+                     'OnslowBay': ['196', '197', '198', '199', '200', '201', '202'],
+                     'Neuse': ['203', '204'],
+                     'Pamlico': ['205', '206', '207', '208']
+                     }
 
 ''' 
 HISTORIC PERIOD DATA 
 '''
-outdir = r'.\05_ANALYSIS\return_period_tables'
-
 n_basin_storms = 5018  # Number of TCs in the Atlantic Basin for the historic period
-n_storms = 1309 # Number of TCs within 200km of study area
-lambda_param = 3.38 * (n_storms / n_basin_storms)
 
 # Load meteo information
 wind_df = pd.read_csv(r'.\02_DATA\NCEP_Reanalysis\wind\basin_tc_windspd_stats.csv',index_col=0)
 rain_df = pd.read_csv(r'.\02_DATA\NCEP_Reanalysis\rain\basin_tc_precipitation_stats.csv', index_col=0)
 stormtide_csv = r'.\02_DATA\NCEP_Reanalysis\stormTide\gage_peaks_ZerosRemoved_ncep.csv'
-fld_df = cleanup_flood_tables1(tables_dir=r'.\04_MODEL_OUTPUTS\ncep\flood_hazard_tables')
+fld_df = cleanup_flood_tables(tables_dir=r'.\04_MODEL_OUTPUTS\ncep\flood_hazard_tables')
 
 aois = np.unique(fld_df.index.get_level_values('basin'))
 for aoi in aois:
-    # if aoi == 'Domain':
-    #     continue
-    # else:
-        # Calculate the RP for the meteo variables
-        meteo_df = cleanup_meteo_tables(wind_df=wind_df, rain_df=rain_df, aoi=aoi)
-        meteo_df = calc_exceedance_probabilities(data=meteo_df, vars=None, n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col=None)
+    # Cleanup variables
+    meteo_df = cleanup_meteo_tables(wind_df=wind_df, rain_df=rain_df, aoi=aoi)
+    st_basin = get_peakStormTide_at_AOI(aoi=aoi, stormtide_csv=stormtide_csv, stormtide_mapdict=stormtide_mapdict)
 
-        # Calculate the RP for the storm tide
-        st_basin = get_peakStormTide_at_AOI(aoi=aoi, stormtide_csv=stormtide_csv)
-        st_basin = calc_exceedance_probabilities(data=st_basin, vars=None, n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col=None)
+    # only keep the storms that have all values
+    # subset = pd.concat(objs=[meteo_df, st_basin], axis=1, ignore_index=False) #.dropna(how='any')
+    # subset_tc_ids = subset.index.values
+    # n_storms = len(subset_tc_ids)  # Number of TCs within 200km of study area
+    n_storms = 1309
+    print(f'{aoi} # of subset TCs = {n_storms}')
+    lambda_param = 3.38 * (n_storms / n_basin_storms)
 
-        # Calculate the RP for the flood hazard - depth and extents
+    # Calculate the RP
+    meteo_df = calc_exceedance_probabilities(data=meteo_df, #[meteo_df.index.isin(subset_tc_ids)],
+                                             vars=None, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col=None)
+    st_basin = calc_exceedance_probabilities(data=st_basin, #[st_basin.index.isin(subset_tc_ids)],
+                                             vars=None, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col=None)
 
-        fld_basin = fld_df.xs(aoi, level='basin').T
-        fld_basin.index.rename(['stat', 'tc_id'], inplace=True)
+    # Calculate the RP for the flood hazard - depth and extents
+    fld_basin = fld_df.xs(aoi, level='basin').T
+    fld_basin.index.rename(['stat', 'tc_id'], inplace=True)
 
-        print(np.unique(fld_basin.index.get_level_values('stat')))
-        select_stats = ['mean', '50%', '90%', 'Area_sqkm']
-        fld_basin_rp = pd.DataFrame()
-        for stat in select_stats:
-            data = fld_basin.xs(stat, level='stat')
-            data.columns = [f'{x}_{stat}' for x in data.columns]
-            data = calc_exceedance_probabilities(data=data, vars=None, n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col=None)
-            fld_basin_rp = pd.concat(objs=[fld_basin_rp, data], axis=1, ignore_index=False)
+    print(np.unique(fld_basin.index.get_level_values('stat')))
+    select_stats = ['mean', '50%', '90%', 'Area_sqkm']
+    fld_basin_rp = pd.DataFrame()
+    for stat in select_stats:
+        data = fld_basin.xs(stat, level='stat')
+        data.columns = [f'{x}_{stat}' for x in data.columns]
+        data = calc_exceedance_probabilities(data=data, #[data.index.isin(subset_tc_ids)],
+                                             vars=None, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col=None)
+        fld_basin_rp = pd.concat(objs=[fld_basin_rp, data], axis=1, ignore_index=False)
 
-        # Combine into a single dataframe and write out
-        combined = pd.concat(objs=[meteo_df, st_basin, fld_basin_rp], axis=1, ignore_index=False)
-        combined = combined.rename_axis('tc_id').round(2)
-        combined['basin'] = aoi
-        combined.to_csv(os.path.join(outdir,f'{aoi}_data_rp_ncep.csv'))
+    # Combine into a single dataframe and write out
+    combined = pd.concat(objs=[meteo_df, st_basin, fld_basin_rp], axis=1, ignore_index=False)
+    combined = combined.rename_axis('tc_id').round(2)
+    combined['basin'] = aoi
+    combined.to_csv(os.path.join(outdir,f'{aoi}_data_rp_ncep.csv'))
 
 
 
 '''
 FUTURE PERIOD DATA
 '''
-n_storms = 1543
+#n_storms = 1543
 n_basin_storms = 6200
-lambda_param = 3.38 * (n_storms / n_basin_storms)
-
 wind_df = pd.read_csv(r'.\02_DATA\CMIP6_585\wind\basin_tc_windspd_stats.csv',index_col=0)
 rain_df = pd.read_csv(r'.\02_DATA\CMIP6_585\rain\basin_tc_precipitation_stats.csv', index_col=0)
 stormtide_csv = r'.\02_DATA\CMIP6_585\stormTide\gage_peaks_ZerosRemoved_canesm_ssp585.csv'
-fld_df = cleanup_flood_tables1(tables_dir=r'.\04_MODEL_OUTPUTS\canesm_ssp585\flood_hazard_tables')
+fld_df = cleanup_flood_tables(tables_dir=r'.\04_MODEL_OUTPUTS\canesm_ssp585\flood_hazard_tables')
 storm_weights = pd.read_csv(r'.\02_DATA\BiasCorrection\canesm_ssp585_weighted.csv', index_col=0, header=None)
 storm_weights.columns = ['vmax','weight']
 
 aois = np.unique(fld_df.index.get_level_values('basin'))
 
 for aoi in aois:
-    # if aoi == 'Domain':
-    #     continue
-    # else:
-        # Calculate the RP for the meteo variables
-        meteo_df = cleanup_meteo_tables(wind_df=wind_df, rain_df=rain_df, aoi=aoi)
-        meteo_df = pd.concat(objs=[meteo_df, storm_weights], axis=1, ignore_index=False)
-        meteo_df = calc_exceedance_probabilities(data=meteo_df, vars=None, n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col='weight')
+    # Cleanup variables
+    meteo_df = cleanup_meteo_tables(wind_df=wind_df, rain_df=rain_df, aoi=aoi)
+    meteo_df = pd.concat(objs=[meteo_df, storm_weights], axis=1, ignore_index=False)
 
-        # Calculate the RP for the storm tide
-        st_basin = get_peakStormTide_at_AOI(aoi=aoi, stormtide_csv=stormtide_csv)
-        st_basin = pd.concat(objs=[st_basin, storm_weights], axis=1, ignore_index=False)
-        st_basin = calc_exceedance_probabilities(data=st_basin, vars=['stormtide'], n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col='weight')
+    st_basin = get_peakStormTide_at_AOI(aoi=aoi, stormtide_csv=stormtide_csv, stormtide_mapdict=stormtide_mapdict)
+    st_basin = pd.concat(objs=[st_basin, storm_weights], axis=1, ignore_index=False)
 
-        # Calculate the RP for the flood hazard - depth and extents
-        fld_basin = fld_df.xs(aoi, level='basin').T
-        fld_basin.index.rename(['stat', 'tc_id'], inplace=True)
-        print(np.unique(fld_basin.index.get_level_values('stat')))
-        select_stats = ['mean', '50%', '90%', 'Area_sqkm']
-        fld_basin_rp = pd.DataFrame()
-        for stat in select_stats:
-            data = fld_basin.xs(stat, level='stat')
-            cols = [f'{x}_{stat}' for x in data.columns]
-            data.columns = cols
-            data = pd.concat(objs=[data, storm_weights], axis=1, ignore_index=False)
+    # only keep the storms that have all values
+    #subset = pd.concat(objs=[meteo_df, st_basin], axis=1, ignore_index=False)#.dropna(how='any')
+    #subset_tc_ids = subset.index.values
+    # n_storms = len(subset_tc_ids)  # Number of TCs within 200km of study area
+    n_storms = 1543
+    print(f'{aoi} # of subset TCs = {n_storms}')
+    lambda_param = 3.38 * (n_storms / n_basin_storms)
 
-            data = calc_exceedance_probabilities(data=data, vars=cols, n_storms=n_storms, lambda_param=lambda_param,
-                                                 weights_col='weight')
-            fld_basin_rp = pd.concat(objs=[fld_basin_rp, data], axis=1, ignore_index=False)
+    # Calculate the RP
+    meteo_df = calc_exceedance_probabilities(data=meteo_df,#[meteo_df.index.isin(subset_tc_ids)],
+                                             vars=None, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col='weight')
+    st_basin = calc_exceedance_probabilities(data=st_basin,#[st_basin.index.isin(subset_tc_ids)],
+                                             vars=None, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col='weight')
 
-        # Combine into a single dataframe and write out
-        combined = pd.concat(objs=[meteo_df, st_basin, fld_basin_rp], axis=1, ignore_index=False)
-        df_rounded = combined.rename_axis('tc_id').round(2)
-        df_rounded['basin'] = aoi
-        df_rounded = pd.concat(objs=[df_rounded, storm_weights],axis=1, ignore_index=False)
-        df_rounded.to_csv(os.path.join(outdir,f'{aoi}_data_rp_canesm.csv'))
+    # Calculate the RP for the flood hazard - depth and extents
+    fld_basin = fld_df.xs(aoi, level='basin').T
+    fld_basin.index.rename(['stat', 'tc_id'], inplace=True)
+
+    print(np.unique(fld_basin.index.get_level_values('stat')))
+    select_stats = ['mean', '50%', '90%', 'Area_sqkm']
+    fld_basin_rp = pd.DataFrame()
+    for stat in select_stats:
+        data = fld_basin.xs(stat, level='stat')
+        cols = [f'{x}_{stat}' for x in data.columns]
+        data.columns = cols
+        data = pd.concat(objs=[data, storm_weights], axis=1, ignore_index=False)
+        data = calc_exceedance_probabilities(data=data,#[data.index.isin(subset_tc_ids)],
+                                             vars=cols, n_storms=n_storms, lambda_param=lambda_param,
+                                             weights_col='weight')
+        fld_basin_rp = pd.concat(objs=[fld_basin_rp, data], axis=1, ignore_index=False)
+
+    # Combine into a single dataframe and write out
+    combined = pd.concat(objs=[meteo_df, st_basin, fld_basin_rp], axis=1, ignore_index=False)
+    df_rounded = combined.rename_axis('tc_id').round(2)
+    df_rounded['basin'] = aoi
+    df_rounded = pd.concat(objs=[df_rounded, storm_weights], axis=1, ignore_index=False)
+    df_rounded.to_csv(os.path.join(outdir, f'{aoi}_data_rp_canesm.csv'))
+
+
+
 
 
 

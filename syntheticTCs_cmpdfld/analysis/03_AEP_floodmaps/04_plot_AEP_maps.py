@@ -33,6 +33,7 @@ da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
 p_aep = xr.concat(objs=da_list, dim='scenario')
 p_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
+##################################################################################################################
 # Load model data/DEM
 data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml])
@@ -48,6 +49,24 @@ dem = cat.get_rasterdataset(elevation_file, chunks=chunks_size)
 water_mask = rf'./masks/water_mask_sbgRes{res}m.tif'
 wb_mask = cat.get_rasterdataset(water_mask, chunks=chunks_size)
 wb_mask.rio.write_crs(32617, inplace=True)
+
+elevation_file = rf'..\03_MODEL_RUNS\subgrid\dep_subgrid_{res}m.tif'
+elevation_da = cat.get_rasterdataset(elevation_file)
+water_mask = rf'./masks/water_mask_sbgRes{res}m.tif'
+wb_mask = cat.get_rasterdataset(water_mask)
+
+# Load layers - run once because it takes a while...
+coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
+coastal_wb = coastal_wb.to_crs(32617)
+coastal_wb_clip = coastal_wb.clip(mod.region)
+
+major_rivers = mod.data_catalog.get_geodataframe('carolinas_nhd_area_rivers')
+major_rivers = major_rivers.to_crs(32617)
+major_rivers_clip = major_rivers.clip(mod.region)
+
+nc_major_rivers = mod.data_catalog.get_geodataframe('carolinas_major_rivers')
+nc_major_rivers = nc_major_rivers.to_crs(32617)
+nc_major_rivers_clip = nc_major_rivers.clip(mod.region)
 
 # Plotting details
 wkt = dem.raster.crs.to_wkt()
@@ -81,7 +100,10 @@ for T in sel_rp:
 
     d_plot = d_plot + [h_depth, p_depth, diff]
 
+from matplotlib.colors import ListedColormap
 
+# Custom white-only colormap
+white_cmap = ListedColormap(['white'])
 outdir = r'.\05_ANALYSIS\aep'
 plot_AEP_depth_climate_comparsion = True
 if plot_AEP_depth_climate_comparsion is True:
@@ -103,15 +125,20 @@ if plot_AEP_depth_climate_comparsion is True:
         data = d_plot[i]
         if i in last_in_row:
             ckwargs = dict(cmap='Reds', vmin=0.05, vmax=1.5)
-            cs2 = data.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=1)
-            ckwargs = dict(cmap='Greys_r', vmin=1, vmax=1)
-            mask = wb_mask.where(wb_mask == 1)
-            mask.plot(ax=ax, add_colorbar=False, zorder=2, **ckwargs)
+            cs2 = data.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=3)
+            # ckwargs = dict(cmap=white_cmap, vmin=1, vmax=1)
+            # mask = wb_mask.where(wb_mask == 1)
+            # mask.plot(ax=ax, add_colorbar=False, zorder=2, **ckwargs)
+            mod.region.plot(ax=ax, color='white', edgecolor='none', zorder=0, alpha=0)
+            #major_rivers_clip.plot(ax=ax, color='slategrey', edgecolor='slategrey', linewidth=0.5, zorder=2, alpha=1)
+            #nc_major_rivers_clip.plot(ax=ax, color='slategrey', edgecolor='slategrey', linewidth=0.5, zorder=2, alpha=1)
+            coastal_wb_clip.plot(ax=ax, color='white', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
+            mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=3, alpha=1)
         else:
             ckwargs = dict(cmap='Blues', vmin=0.05, vmax=6)
             cs = data.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=1)
-        mod.region.plot(ax=ax, color='grey', edgecolor='none', zorder=0, alpha=0.6)
-        mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.25, zorder=2, alpha=1)
+            mod.region.plot(ax=ax, color='grey', edgecolor='none', zorder=0, alpha=0.8)
+            mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
         ax.set_axis_off()
         ax.set_title('')
 
@@ -151,7 +178,7 @@ if plot_AEP_depth_climate_comparsion is True:
 
     plt.subplots_adjust(wspace=0.0, hspace=0)
     plt.margins(x=0, y=0)
-    plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\aep\aep_flood_depths_historic_projected_difference.jpg', bbox_inches='tight', dpi=300)
+    plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\03_AEP_floodmaps_compound\aep_flood_depths_historic_projected_difference.jpg', bbox_inches='tight', dpi=300)
     plt.close()
 
 

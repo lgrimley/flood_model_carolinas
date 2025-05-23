@@ -232,7 +232,7 @@ if load_geo_layers is True:
 
 building_df = pd.read_csv('buildings_tc_exposure_rp_real.csv', index_col=0, low_memory=True)
 print(building_df.columns)
-depth_threshold=0.64
+depth_threshold=0.1
 data_plot = []
 var_plot = []
 for storm in storms:

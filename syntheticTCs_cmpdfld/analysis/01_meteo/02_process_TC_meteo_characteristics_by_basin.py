@@ -11,7 +11,7 @@ cat = hydromt.DataCatalog(data_libs=[data_catalog_yml])
 mod_domain = cat.get_geodataframe(data_like='enc_domain_HUC6_clipped').to_crs(4326)
 
 ''' Processes TCR rainfall by basin '''
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585')
 ds = xr.open_dataset(r'.\rain\tc_precipitation_stats.nc').compute()
 # Load in the mask already created where the values of the cell is equal to the mod_domain index
 mask = xr.open_dataarray(r'.\rain\basin_mask_TCR.tif')
@@ -46,6 +46,12 @@ for i in range(len(mod_domain.index)):
     df = ds['max_RR'].where(mask == i).max(dim=['x', 'y']).to_dataframe()
     df.drop(columns='spatial_ref', inplace=True)
     df.columns = [f'{basin}_maxRR']
+    df_list.append(df)
+
+    # Calculate average max rain rate
+    df = ds['max_RR'].where(mask == i).mean(dim=['x', 'y']).to_dataframe()
+    df.drop(columns='spatial_ref', inplace=True)
+    df.columns = [f'{basin}_AvgmaxRR']
     df_list.append(df)
 
     # Calculate the mean rain rate, no threshold
@@ -93,6 +99,12 @@ df.drop(columns='spatial_ref', inplace=True)
 df.columns = [f'{basin}_maxRR']
 df_list.append(df)
 
+# Calculate average max rain rate
+df = ds['max_RR'].mean(dim=['x', 'y']).to_dataframe()
+df.drop(columns='spatial_ref', inplace=True)
+df.columns = [f'{basin}_AvgmaxRR']
+df_list.append(df)
+
 # Calculate the mean rain rate, no threshold
 df = ds['mean_RR'].mean(dim=['x', 'y']).to_dataframe()
 df.drop(columns='spatial_ref', inplace=True)
@@ -109,7 +121,7 @@ rain_stats = pd.concat(objs=df_list, axis=1, ignore_index=False)
 print(f'Done processing {basin}')
 
 final = pd.concat(objs=[basin_precip_stats, rain_stats], axis=1, ignore_index=False).round(2)
-final.to_csv(r'.\rain\basin_tc_precipitation_stats.csv')
+final.to_csv(r'.\rain\basin_tc_precipitation_stats_v2.csv')
 
 
 ''' Processes Wind by basin '''

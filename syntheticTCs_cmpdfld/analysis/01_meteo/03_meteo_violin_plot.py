@@ -20,8 +20,8 @@ basins = cat.get_geodataframe(data_like=r'Z:\Data-Expansion\users\lelise\project
 basins = basins.to_crs(epsg=32617)
 
 
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\return_period_tables')
-outdir = r'..\storm_set_stats'
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\01_return_period_tables')
+outdir = r'..\02_storm_set_stats'
 
 
 def expand_df_by_weights(df, scenarios, groupby_col=None):
@@ -44,9 +44,9 @@ def expand_df_by_weights(df, scenarios, groupby_col=None):
 
 
 # Load the historical TC data
-all_vars = ['maxWS', 'meanMaxWS', 'meanWS', 'meanWSthresh', 'meanDirection',
-       'CumPrecipKM3', 'MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR', 'meanRR',
-       'meanRRthresh', 'stormtide']
+all_vars = ['maxWS', 'meanMaxWS', 'meanWS', 'meanWSthresh', 'meanDirection','stormtide',
+'CumPrecipKM3', 'MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR', 'meanRR', 'AvgmaxRR',
+       'meanRRthresh']
 
 
 ncep_csvfiles = [f for f in os.listdir() if f.endswith('ncep.csv')]
@@ -84,7 +84,7 @@ matching_cols = combined_stats.columns[combined_stats.columns.str.contains('Doma
 subset = combined_stats[matching_cols]
 subset[f'Diff'] = subset[f'Domain_Fut'] - subset['Domain']
 subset[f'FractionalChange'] = ((subset[f'Diff']) / subset['Domain'])
-#subset.round(3).to_csv(rf'{outdir}\meteo_stormtide_histogramStats_Domain.csv')
+subset.round(3).to_csv(rf'{outdir}\meteo_stormtide_histogramStats_Domain.csv')
 
 watersheds = ['CapeFear', 'LowerPeeDee', 'Neuse', 'OnslowBay', 'Pamlico']
 matching_cols = combined_stats.columns[~combined_stats.columns.str.contains('Domain', case=False, regex=False)]
@@ -93,27 +93,30 @@ for w in watersheds:
     subset[f'{w}_Diff'] = subset[f'{w}_Fut'] - subset[w]
     subset[f'{w}_FractionalChange'] = ((subset[f'{w}_Diff']) / subset[w])
 
-#subset.round(3).to_csv(rf'{outdir}\meteo_stormtide_histogramStats_watershed.csv')
+subset.round(3).to_csv(rf'{outdir}\meteo_stormtide_histogramStats_watershed.csv')
 
 
 
-titles = ['Maximum Rain Rate', 'Cumulative Precipitation', 'Maximum Wind Speed', 'Peak Storm Tide']
-scenarios = ['maxRR','CumPrecipKM3','maxWS','stormtide']
 
-plot_biascorrected = True
-if plot_biascorrected is True:
+scenarios = ['AvgmaxRR','maxRR', 'meanRRthresh','MeanTotPrecipMM','MaxTotPrecipMM','CumPrecipKM3']
+titles = ['Area-Avg Maximum Rain Rate', 'Maximum Rain Rate', 'Area-Avg Rain Rate > 5 mm/hr', 'Area-Avg Total Rainfall',
+          'Maximum Total Rainfall', 'Cumulative Rainfall']
+ylabels = ['mm/hr', 'mm/hr', 'mm/hr', 'mm', 'mm', 'km3']
+filenameout = 'rain_stormtide_violinPlot_biasCorr.png'
+yaxis_lim1 = [(-1, 50), (-1, 100), (5, 20), (-10, 175),(-10, 400),(-10, 3500)]
+yaxis_lim2 = [(-1, 20), (-1, 200), (5, 20), (-10, 100),(-10, 800),(-10, 70000)]
+
+plot_biascorrected_rain = True
+if plot_biascorrected_rain is True:
     font = {'family': 'Arial', 'size': 10}
     mpl.rc('font', **font)
     mpl.rcParams.update({'axes.titlesize': 10})
     mpl.rcParams["figure.autolayout"] = True
-    ylabels = ['mm/hr', 'cubic km','m/s', 'm']
 
-    #fig, axs = plt.subplots(ncols=2, nrows=len(scenarios), figsize=(5, 6), sharey=False, sharex=False)
-    #axs = axs.flatten()
 
     # Create a figure with GridSpec
-    fig = plt.figure(figsize=(8, 6))  # Set figure size
-    gs = fig.add_gridspec(len(scenarios), 3, width_ratios=[3, 1, 0], height_ratios=[1, 1, 1, 1])  # First column takes 3/4 of the space
+    fig = plt.figure(figsize=(7, 8.5))  # Set figure size
+    gs = fig.add_gridspec(len(scenarios), 3, width_ratios=[3, 1, 0], height_ratios=[1, 1, 1, 1, 1, 1])  # First column takes 3/4 of the space
     # Iterate through the scenarios and plot
     for i in range(len(scenarios)):
         scenario = scenarios[i]
@@ -128,7 +131,7 @@ if plot_biascorrected is True:
         df_long_basin = df_long[df_long['basin'] != 'Domain']
 
         # Create axes using GridSpec
-        yaxis_lim = [(-10, 150), (-100, 5000), (0, 75), (0, 3)]
+
         basin_order = ['LPD', 'CapeFear', 'OnslowBay', 'Neuse', 'Pamlico']
         ax1 = fig.add_subplot(gs[i, 0])  # First column (2/3 of the space)
         sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_basin,
@@ -155,21 +158,21 @@ if plot_biascorrected is True:
             for jj, period in enumerate(['Historic', 'Projected']):
                 subset = df_long_basin[(df_long_basin['basin'] == basin) & (df_long_basin['Period'] == period)]
                 if not subset.empty:
-                    p5 = np.percentile(subset['data_value'], 5)
-                    p95 = np.percentile(subset['data_value'], 95)
+                    p10 = np.percentile(subset['data_value'], 10)
+                    p90 = np.percentile(subset['data_value'], 90)
                     median = np.percentile(subset['data_value'], 50)
 
                     # X-position adjustment for split violin
                     offset = -0.2 if period == 'Historic' else 0.2
                     x = ii + offset
 
-                    # Draw whisker line from 5th to 95th percentile
-                    ax1.plot([x, x], [p5, p95], color='black', lw=2, zorder=2)
+                    # Draw whisker line from 10th to 90th percentile
+                    ax1.plot([x, x], [p10, p90], color='black', lw=2, zorder=2)
 
                     # Draw a horizontal line for the median
                     ax1.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
 
-        ax1.set_ylim(yaxis_lim[i])
+        ax1.set_ylim(yaxis_lim1[i])
         pos = ax1.get_position()  # Get the axis position
         n_by_period = df_long_basin.groupby(['basin', 'Period']).size().reset_index(name='n')
         new_xtick_labels = []
@@ -190,7 +193,7 @@ if plot_biascorrected is True:
         # Plot for the second subplot in the second column (1/3 space)
         ax2 = fig.add_subplot(gs[i, 1])  # Second column (1/3 of the space)
         basin_order = ['Domain']
-        yaxis_lim = [(-10, 200), (-100, 80000), (0, 100), (0, 4)]
+
         sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_domain,
                        ax=ax2,
                        split=True,
@@ -214,8 +217,8 @@ if plot_biascorrected is True:
             for jj, period in enumerate(['Historic', 'Projected']):
                 subset = df_long_domain[(df_long_domain['basin'] == basin) & (df_long_domain['Period'] == period)]
                 if not subset.empty:
-                    p5 = np.percentile(subset['data_value'], 5)
-                    p95 = np.percentile(subset['data_value'], 95)
+                    p10 = np.percentile(subset['data_value'], 10)
+                    p90 = np.percentile(subset['data_value'], 90)
                     median = np.percentile(subset['data_value'], 50)
 
                     # X-position adjustment for split violin
@@ -223,25 +226,167 @@ if plot_biascorrected is True:
                     x = ii + offset
 
                     # Draw whisker line from 5th to 95th percentile
-                    ax2.plot([x, x], [p5, p95], color='black', lw=2, zorder=2)
+                    ax2.plot([x, x], [p10, p90], color='black', lw=2, zorder=2)
 
                     # Draw a horizontal line for the median
                     ax2.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
 
-        ax2.set_ylim(yaxis_lim[i])
+        ax2.set_ylim(yaxis_lim2[i])
         ax2.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)
         ax2.get_legend().set_visible(False)
         ax2.set_xlabel('')
-        ax2.set_ylabel(ylabels[i])
+        ax2.set_ylabel('')#ylabels[i])
+        ax2.yaxis.label.set_visible(False)
         ax2.set_title('')
 
-        # Set the same y-ticks and y-grid for ax2 to match ax1
-        # ax2.set_yticks(ax1.get_yticks())
-        # ax2.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)
-
-        # Set the shared title for the row
-        #fig.text(0.5, 1 - (i * 0.265), titles[i], ha='center', va='bottom', fontsize=12)  # Adjust vertical position based on row index
-    #plt.tight_layout(h_pad=0.5)  # Increase the gap between rows (use `h_pad`)
+    plt.margins(x=0, y=0)
     plt.tight_layout()
     plt.show()
-    plt.savefig(rf'{outdir}\flood_drivers_violin_biasCorr.png',dpi=300)
+    plt.savefig(rf'{outdir}\{filenameout}',dpi=300)
+
+
+
+scenarios = ['meanWSthresh', 'meanMaxWS', 'maxWS','stormtide']
+titles = ['Area-Avg Wind Speed > 5 m/s','Area-Avg Maximum Wind Speed', 'Maximum Wind Speed','Peak Storm Tide']
+ylabels = ['m/s', 'm/s', 'm/s' ,'m']
+filenameout = 'wind_stormtide_violinPlot_biasCorr.png'
+yaxis_lim1 = [(5, 20), (0, 40), (0, 60), (0.25, 2.75)]
+yaxis_lim2 = [(5, 15), (0, 30), (10, 80), (0.25, 4)]
+
+plot_biascorrected_wind = True
+if plot_biascorrected_wind is True:
+    font = {'family': 'Arial', 'size': 10}
+    mpl.rc('font', **font)
+    mpl.rcParams.update({'axes.titlesize': 10})
+    mpl.rcParams["figure.autolayout"] = True
+
+
+    # Create a figure with GridSpec
+    fig = plt.figure(figsize=(7, 8))  # Set figure size
+    gs = fig.add_gridspec(len(scenarios), 3, width_ratios=[3, 1, 0], height_ratios=[1, 1, 1, 1])  # First column takes 3/4 of the space
+    # Iterate through the scenarios and plot
+    for i in range(len(scenarios)):
+        scenario = scenarios[i]
+        df_combined = pd.concat([histdf[['tc_id', 'basin', scenario, 'Period']],
+                                 futdf[['tc_id', 'basin', scenario, 'Period']]])
+        df_combined['basin'] = df_combined['basin'].replace('LowerPeeDee', 'LPD')
+        df_long = pd.melt(df_combined, id_vars=['tc_id', 'basin', 'Period'], value_vars=[scenario],
+                          var_name='data_type', value_name='data_value')
+        df_long.dropna(axis=0, inplace=True)
+        df_long = df_long.replace([np.inf, -np.inf], np.nan).dropna(subset=['data_value'])
+        df_long_domain = df_long[df_long['basin'] == 'Domain']
+        df_long_basin = df_long[df_long['basin'] != 'Domain']
+
+        # Create axes using GridSpec
+
+        basin_order = ['LPD', 'CapeFear', 'OnslowBay', 'Neuse', 'Pamlico']
+        ax1 = fig.add_subplot(gs[i, 0])  # First column (2/3 of the space)
+        sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_basin,
+                       ax=ax1,
+                       order=basin_order,
+                       split=True,
+                       fill=True,
+                       gap=0.05,
+                       log_scale=False,
+                       width=1,
+                       density_norm='width',
+                       dodge='auto',
+                       bw_method=0.2,
+                       common_norm=True,
+                       linecolor='none',
+                       zorder=1,
+                       palette={'Historic': 'silver', 'Projected': 'grey'},
+                       inner=None,
+                       cut=0
+                       )
+
+        # Loop to calculate and plot 90th percentiles
+        for ii, basin in enumerate(basin_order):
+            for jj, period in enumerate(['Historic', 'Projected']):
+                subset = df_long_basin[(df_long_basin['basin'] == basin) & (df_long_basin['Period'] == period)]
+                if not subset.empty:
+                    p10 = np.percentile(subset['data_value'], 10)
+                    p90 = np.percentile(subset['data_value'], 90)
+                    median = np.percentile(subset['data_value'], 50)
+
+                    # X-position adjustment for split violin
+                    offset = -0.2 if period == 'Historic' else 0.2
+                    x = ii + offset
+
+                    # Draw whisker line from 10th to 90th percentile
+                    ax1.plot([x, x], [p10, p90], color='black', lw=2, zorder=2)
+
+                    # Draw a horizontal line for the median
+                    ax1.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
+
+        ax1.set_ylim(yaxis_lim1[i])
+        pos = ax1.get_position()  # Get the axis position
+        n_by_period = df_long_basin.groupby(['basin', 'Period']).size().reset_index(name='n')
+        new_xtick_labels = []
+        for basin in basin_order:
+            d = n_by_period[n_by_period['basin'] == basin]
+            nh = d[d['Period'] == 'Historic']['n'].item()
+            npx = d[d['Period'] == 'Projected']['n'].item()
+            new_string = f'{basin}'#\n(nH={nh},\nnP={np})'
+            new_xtick_labels.append(new_string)
+
+        ax1.set_xticks(ticks=[0, 1, 2, 3, 4], labels=new_xtick_labels, rotation=0, fontsize=10, color='black')
+        ax1.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)
+        ax1.get_legend().set_visible(False)
+        ax1.set_xlabel('')
+        ax1.set_ylabel(ylabels[i])
+        ax1.set_title(titles[i])
+
+        # Plot for the second subplot in the second column (1/3 space)
+        ax2 = fig.add_subplot(gs[i, 1])  # Second column (1/3 of the space)
+        basin_order = ['Domain']
+
+        sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_domain,
+                       ax=ax2,
+                       split=True,
+                       fill=True,
+                       gap=0.05,
+                       log_scale=False,
+                       width=1,
+                       density_norm='width',
+                       dodge='auto',
+                       bw_method=0.2,
+                       common_norm=True,
+                       linecolor='none',
+                       zorder=1,
+                       palette={'Historic': 'silver', 'Projected': 'grey'},
+                       inner=None,
+                       cut=0
+                       )
+
+        # Loop to calculate and plot 90th percentiles
+        for ii, basin in enumerate(basin_order):
+            for jj, period in enumerate(['Historic', 'Projected']):
+                subset = df_long_domain[(df_long_domain['basin'] == basin) & (df_long_domain['Period'] == period)]
+                if not subset.empty:
+                    p10 = np.percentile(subset['data_value'], 10)
+                    p90 = np.percentile(subset['data_value'], 90)
+                    median = np.percentile(subset['data_value'], 50)
+
+                    # X-position adjustment for split violin
+                    offset = -0.2 if period == 'Historic' else 0.2
+                    x = ii + offset
+
+                    # Draw whisker line from 5th to 95th percentile
+                    ax2.plot([x, x], [p10, p90], color='black', lw=2, zorder=2)
+
+                    # Draw a horizontal line for the median
+                    ax2.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
+
+        ax2.set_ylim(yaxis_lim2[i])
+        ax2.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)
+        ax2.get_legend().set_visible(False)
+        ax2.set_xlabel('')
+        ax2.set_ylabel('')#ylabels[i])
+        ax2.yaxis.label.set_visible(False)
+        ax2.set_title('')
+
+    plt.margins(x=0, y=0)
+    plt.tight_layout()
+    plt.show()
+    plt.savefig(rf'{outdir}\{filenameout}',dpi=300)
