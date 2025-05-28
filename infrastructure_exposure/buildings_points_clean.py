@@ -1,21 +1,9 @@
 #!/usr/bin/env python
 # coding: utf-8
 import os
-import re
 import pandas as pd
-import numpy as np
 import geopandas as gpd
-import matplotlib.pyplot as plt
-import datetime as dt
-import xarray as xr
-import matplotlib as mpl
-import hydromt
-from hydromt import DataCatalog
-import hydromt_sfincs
 from hydromt_sfincs import SfincsModel
-mpl.use('TkAgg')
-plt.ion()
-
 
 # Filepath to data catalog yml
 cat_dir = r'Z:\Data-Expansion\users\lelise\data'

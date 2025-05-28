@@ -13,10 +13,11 @@
       <change afterPath="$PROJECT_DIR$/.idea/workspace.xml" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/buildings_points_clean.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/historical_storms/01_extract_depth_at_buildings.py" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/historical_storms/building_exposure_historicalStorms.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/historical_storms/02_building_exposure_stats.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/historical_storms/03_pieChart_floodTotals.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/historical_storms/04_BuildExposure_HexbinPlot.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/Florence_FloodHazard_Exposure_pieChart.ipynb" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/Roadway Depths.ipynb" afterDir="false" />
-      <change afterPath="$PROJECT_DIR$/old/StormExposure_HexbinPlot.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/build_exposure_RP.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/calc_RP_data_at_buildings.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/exposure_lulc.py" afterDir="false" />
