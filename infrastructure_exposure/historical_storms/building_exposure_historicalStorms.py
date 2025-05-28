@@ -27,7 +27,7 @@ if os.path.exists(bld_tot_df_filpath) is False:
     building_df = pd.read_csv('buildings_tc_exposure_rp_real.csv', index_col=0, low_memory=True)
     print(building_df.columns)
 
-    depth_thresholds = [0.1, 0.25, 0.5, 0.64, 1 , 1.5, 2]
+    depth_thresholds = [0.1, 0.25, 0.5, 1 , 1.5, 2]
     storms = ['flor','floy','matt']
     building_totals = pd.DataFrame()
     for depth_threshold in depth_thresholds:
