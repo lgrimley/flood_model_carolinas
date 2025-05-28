@@ -27,7 +27,7 @@ dfs.drop(columns=['storm', 'climate', 'gridRes'], inplace=True)
 df_reset = dfs.reset_index()  # bring 'group' back as a column to pivot
 df_pivoted = df_reset.pivot_table(index='group', columns='attrCode', values='Area_sqkm', aggfunc='first')
 df_pivoted.drop(columns=['Total'], inplace=True)
-pie_scale = df_pivoted.sum(axis=1) / 14000
+pie_scale = df_pivoted.sum(axis=1) / 12000
 
 # Plotting
 runs_to_plot = ['flor_present', 'flor_future', 'floy_present', 'floy_future', 'matt_present', 'matt_future']
@@ -43,7 +43,7 @@ nrow, ncol = 3, 2
 n_subplots = nrow * ncol
 first_in_row = np.arange(0, n_subplots, ncol)
 last_row = np.arange(n_subplots - ncol, n_subplots, 1)
-fig, axs = plt.subplots(nrows=nrow, ncols=ncol, figsize=(5, 5.5))
+fig, axs = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 5))
 axs = axs.flatten()
 for i in range(len(runs_to_plot)):
     ax = axs[i]
@@ -51,20 +51,20 @@ for i in range(len(runs_to_plot)):
     ax.pie(d.to_numpy()[0],
            colors=colors,
            radius=pie_scale[pie_scale.index == runs_to_plot[i]][0],
-           startangle=90,
-           autopct='%1.1f%%'
+           startangle=45,
+           autopct='%1.0f%%'
            )
 for i in range(len(first_in_row)):
     axs[first_in_row[i]].text(-0.1, 0.5, storms[i],
                               horizontalalignment='right', verticalalignment='center',
                               rotation='horizontal',transform=axs[first_in_row[i]].transAxes)
-axs[0].set_title('Present')
-axs[1].set_title('Future')
+#axs[0].set_title('Present')
+#axs[1].set_title('Future')
 legend_kwargs0 = dict(bbox_to_anchor=(2.2, 0.8), title=None, loc="upper right", frameon=True, prop=dict(size=10))
 axs[3].legend(labels=df_pivoted.columns, **legend_kwargs0)
 plt.subplots_adjust(wspace=0.0, hspace=0.0)
 plt.margins(x=0, y=0)
 #plt.tight_layout()
-fig.suptitle(f'{res}m')
+#fig.suptitle(f'{res}m')
 plt.savefig(f'fld_area_pieChart_sbgRes{res}.jpg', bbox_inches='tight', dpi=300)
 plt.close()
