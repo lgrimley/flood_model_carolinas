@@ -5,7 +5,7 @@ from hydromt_sfincs import SfincsModel
 import scipy.io as sio
 
 
-mod = SfincsModel(root=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\sfincs_base_mod', mode='r')
+mod = SfincsModel(root=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL_RUNS\sfincs_base_mod', mode='r')
 region = mod.region.to_crs(4326).buffer(1.8)
 
 # ADCIRC station locations that are used for calculating approximate landfall location
@@ -49,7 +49,7 @@ matfile = 'UScoast6_AL_ncep_reanal_roEst1rmEst1_trk100.mat'
 tc_tracks = sio.loadmat(f'{matfile}')
 
 # Load the TC IDs that were modeled in ADCIRC (almost all tracks are within 200km of the gage locations)
-modeled_tcs = pd.read_csv(fr'../stormTide/gage_peaks_ZerosRemoved_ncep.csv', index_col=0)
+modeled_tcs = pd.read_csv(r'../stormTide/gage_peaks_ZerosRemoved_ncep.csv', index_col=0)
 modeled_tcs['tc_id'] = modeled_tcs.index.tolist()
 tc_ids = modeled_tcs['tc_id'].tolist()
 

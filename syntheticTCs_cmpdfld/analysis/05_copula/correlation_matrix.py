@@ -1,0 +1,158 @@
+import os
+import pandas as pd
+import matplotlib as mpl
+import matplotlib.pyplot as plt
+import scipy.stats
+import seaborn as sns
+import numpy as np
+import matplotlib.patches as patches
+
+mpl.use('TkAgg')
+plt.ion()
+
+###################################################################################################################
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\01_return_period_tables')
+outdir = r'..\07_correlation_matrix'
+
+# sel_cols = ['maxWS', 'meanMaxWS', 'meanWSthresh', 'CumPrecipKM3', 'MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR',
+#        'AvgmaxRR', 'meanRRthresh', 'stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm',
+#        'Runoff_Area_sqkm', 'Total_Area_sqkm', 'basin']
+
+sel_cols = ['maxWS', 'meanMaxWS',
+            'MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR', 'AvgmaxRR',
+            'stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm', 'Runoff_Area_sqkm', 'Total_Area_sqkm', 'basin']
+###################################################################################################################
+ncep_csvfiles = [f for f in os.listdir() if f.endswith('ncep.csv')]
+histdf = pd.concat((pd.read_csv(file, index_col=0) for file in ncep_csvfiles), ignore_index=False)
+histdf = histdf[sel_cols]
+
+# Track info at landfall
+track_table_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\tracks\ncep_landfall_track_info.csv'
+track_df = pd.read_csv(track_table_filepath, index_col=0)
+track_df.set_index('tc_id', inplace=True, drop=True)
+track_df = track_df[['rmw100','pstore100','speed100','vstore100']]
+
+###################################################################################################################
+# Load the projected/future TC data
+canesm_csvfiles = [f for f in os.listdir() if f.endswith('canesm.csv')]
+futdf = pd.concat((pd.read_csv(file, index_col=0) for file in canesm_csvfiles), ignore_index=False)
+futdf = futdf[sel_cols]
+
+# Track info at landfall
+track_table_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585\tracks\canesm_landfall_track_info.csv'
+track_df = pd.read_csv(track_table_filepath, index_col=0)
+track_df.set_index('tc_id', inplace=True, drop=True)
+track_df = track_df[['rmw100','pstore100','speed100','vstore100']]
+
+###################################################################################################################
+df = futdf
+clim = 'CANESM'
+
+sections = {
+    'Track': ['rmw100','pstore100','speed100','vstore100'],
+    'Wind': ['maxWS', 'meanMaxWS'],
+    'Rainfall': ['MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR', 'AvgmaxRR'],
+    'Hazard': ['stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm', 'Runoff_Area_sqkm'],
+}
+display_names = {
+    'rmw100': 'Radius Max WSpd',
+    'pstore100': 'Min Cent. Press.',
+    'speed100': 'Translation Spd',
+    'vstore100': 'Max Sust. WSpd',
+    'maxWS': 'Max WSpd',
+    'meanMaxWS': 'Avg Max WSpd',
+    'MeanTotPrecipMM': 'Avg Tot Precip',
+    'MaxTotPrecipMM': 'Max Tot Precip',
+    'maxRR': 'Max Rain Rate',
+    'AvgmaxRR': 'Avg Max Rain Rate',
+    'stormtide': 'Storm Tide',
+    'Coastal_Area_sqkm': 'Coastal Fld',
+    'Runoff_Area_sqkm': 'Runoff Fld',
+    'Compound_Area_sqkm': 'Compound Fld',
+    'Total_Area_sqkm': 'Total Fld'
+}
+group_sizes = [len(v) for v in sections.values()]
+ordered_cols = [col for group in sections.values() for col in group]
+pval_lim = 0.01
+
+# --- Main loop ---
+for basin_name, group in df.groupby('basin'):
+    print(f"\n🔹 Basin: {basin_name}")
+    group = group.drop(columns='basin', errors='ignore')
+    group = pd.concat([group, track_df], axis=1)
+
+
+    group = group.select_dtypes(include='number').dropna()
+    cols = group.columns
+
+    # Compute rho and p-value
+    rho_matrix = pd.DataFrame(index=cols, columns=cols, dtype=float)
+    pval_matrix = pd.DataFrame(index=cols, columns=cols, dtype=float)
+
+    for col1 in cols:
+        for col2 in cols:
+            rho, pval = scipy.stats.spearmanr(group[col1], group[col2], nan_policy='omit')
+            rho_matrix.loc[col1, col2] = rho
+            pval_matrix.loc[col1, col2] = pval
+
+    # Reorder and filter for significance
+    rho_matrix = rho_matrix.loc[ordered_cols, ordered_cols]
+    pval_matrix = pval_matrix.loc[ordered_cols, ordered_cols]
+    sig_rho = rho_matrix.mask(pval_matrix >= pval_lim)
+
+
+    xticklabels = [display_names.get(col, col) for col in ordered_cols]
+    yticklabels = [display_names.get(col, col) for col in ordered_cols]
+
+    # Plot
+    plt.figure(figsize=(8, 6.5))
+    ax = sns.heatmap(sig_rho, cmap='coolwarm', annot=True, fmt=".2f", center=0, annot_kws={'size': 7},
+                     linewidths=1, linecolor='white', cbar=True, square=False,
+                     vmin=-1, vmax=1,
+                     xticklabels=xticklabels, yticklabels=yticklabels,
+                     cbar_kws={'shrink': 0.8}
+                     )
+
+    # Rotate tick labels
+    ax.set_xticklabels(ax.get_xticklabels(), rotation=90, size=8)
+    ax.set_yticklabels(ax.get_yticklabels(), rotation=0, size=8)
+
+    # Add section group labels (without spacing)
+    section_positions = np.cumsum([0] + group_sizes[:-1])
+    for i, (label, start) in enumerate(zip(sections.keys(), section_positions)):
+        group_len = group_sizes[i]
+        mid = start + group_len / 2 - 0.5
+        n = len(ordered_cols)
+        # Add labels outside the heatmap
+        ax.text(-3.5, mid, label, va='center', ha='center', fontsize=10, fontweight='bold', rotation=90)
+        ax.text(mid, n + 5, label, va='bottom', ha='center', fontsize=10, fontweight='bold', rotation=0)
+
+    # Section start positions
+    section_starts = np.cumsum([0] + group_sizes[:-1])
+
+    # Draw box around each section block (diagonal squares)
+    for start, size in zip(section_positions, group_sizes):
+        rect = patches.Rectangle(
+            (start, start),
+            width=size,
+            height=size,
+            fill=False,
+            edgecolor='black',
+            linewidth=2
+        )
+        ax.add_patch(rect)
+
+    # Titles and output
+    title = f"{basin_name} ({clim}): Spearman Correlation (p < {pval_lim})"
+    plt.title(title, fontsize=10)
+    plt.subplots_adjust(wspace=0.0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for title
+    plt.savefig(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}_pvalue{pval_lim}_labeled.png'), dpi=300, bbox_inches='tight')
+    plt.close()
+
+
+
+
+
+

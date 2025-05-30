@@ -2,18 +2,8 @@ import pandas as pd
 import sys
 import os
 import numpy as np
-import matplotlib as mpl
-import matplotlib.pyplot as plt
-import os
-import numpy as np
-
 sys.path.append(r'/')
-mpl.use('TkAgg')
-plt.ion()
-font = {'family': 'Arial', 'size': 10}
-mpl.rc('font', **font)
-mpl.rcParams.update({'axes.titlesize': 10})
-plt.rcParams['figure.constrained_layout.use'] = True
+
 
 
 def cleanup_meteo_tables(wind_df: pd.DataFrame, rain_df: pd.DataFrame, aoi: str=None):
