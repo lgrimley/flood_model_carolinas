@@ -87,13 +87,13 @@ def get_depth_extent_stats(hmax_da: xr.DataArray, run_id, attr_da: xr.DataArray=
 
 
 
-#wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS'
-wdir = r'/projects/sfincs/syntheticTCs_cmpdfld/MODEL_OUTPUTS'
+wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS'
+#wdir = r'/projects/sfincs/syntheticTCs_cmpdfld/MODEL_OUTPUTS'
 os.chdir(wdir)
 
 # Read in the data catalog to get the model and basin geom
-#data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Carolinas.yml'
-data_catalog_yml = r'/projects/sfincs/data/data_catalog_SFINCS_Carolinas.yml'
+data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Carolinas.yml'
+#data_catalog_yml = r'/projects/sfincs/data/data_catalog_SFINCS_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml])
 # Read in the data catalog to get the model and basin geom
 basins = cat.get_geodataframe(data_like=r'./masks/basins_shp/huc6_basins.shp')
@@ -105,8 +105,8 @@ res = 20
 hmin = 0.05
 
 '''' Create basin and water body masks if they don't exist '''
-#elevation_file = rf'..\03_MODEL_RUNS\subgrid\dep_subgrid_{res}m.tif'
-elevation_file = rf'./subgrid/dep_subgrid_{res}m.tif'
+elevation_file = rf'..\03_MODEL_RUNS\subgrid\dep_subgrid_{res}m.tif'
+#elevation_file = rf'./subgrid/dep_subgrid_{res}m.tif'
 
 water_mask = rf'./masks/water_mask_sbgRes{res}m.tif'
 if os.path.exists(water_mask) is False:

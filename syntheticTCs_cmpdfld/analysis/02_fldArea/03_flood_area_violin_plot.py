@@ -16,7 +16,7 @@ data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Car
 yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml, yml_base])
 # Read in the data catalog to get the model and basin geom
-basins = cat.get_geodataframe(data_like=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\downscale_test\masks\huc6_basins.shp')
+basins = cat.get_geodataframe(data_like=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS\masks\basins_shp\huc6_basins.shp')
 basins = basins.to_crs(epsg=32617)
 
 
@@ -64,8 +64,8 @@ df1 = expand_df_by_weights(df=futdf, scenarios=scenarios)
 
 
 titles = scenarios
-yaxis_lim1 = [(-100, 3000), (-100, 1500), (-10, 400), (-100, 3000)]
-yaxis_lim2 = [(-100, 4000), (0, 3000), (-10, 1000), (0, 8000)]
+yaxis_lim1 = [(-10, 3000), (-10, 1500), (-10, 400), (-10, 3000)]
+yaxis_lim2 = [(-10, 4400), (400, 3400), (-10, 1000), (400, 8400)]
 
 plot_biascorrected = True
 if plot_biascorrected is True:
@@ -110,7 +110,8 @@ if plot_biascorrected is True:
                        zorder=1,
                        palette={'Historic': 'silver', 'Projected': 'grey'},
                        inner=None,
-                       cut=0
+                       cut=0,
+                       alpha=0.7
                        )
 
         # Loop to calculate and plot 90th percentiles
@@ -168,7 +169,8 @@ if plot_biascorrected is True:
                        zorder=1,
                        palette={'Historic': 'silver', 'Projected': 'grey'},
                        inner=None,
-                       cut=0
+                       cut=0,
+                       alpha=0.7
                        )
 
         # Loop to calculate and plot 90th percentiles

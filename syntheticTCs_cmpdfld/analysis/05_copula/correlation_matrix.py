@@ -24,13 +24,18 @@ sel_cols = ['maxWS', 'meanMaxWS',
 ###################################################################################################################
 ncep_csvfiles = [f for f in os.listdir() if f.endswith('ncep.csv')]
 histdf = pd.concat((pd.read_csv(file, index_col=0) for file in ncep_csvfiles), ignore_index=False)
+cols_to_check = ['Coastal_Area_sqkm', 'Compound_Area_sqkm', 'Runoff_Area_sqkm', 'Total_Area_sqkm']
+percentiles = histdf[cols_to_check].quantile(0.9)
+condition = histdf[cols_to_check].gt(percentiles)
+subset_df = histdf[condition.any(axis=1)]
 histdf = histdf[sel_cols]
 
 # Track info at landfall
 track_table_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\tracks\ncep_landfall_track_info.csv'
 track_df = pd.read_csv(track_table_filepath, index_col=0)
 track_df.set_index('tc_id', inplace=True, drop=True)
-track_df = track_df[['rmw100','pstore100','speed100','vstore100']]
+track_df_hist = track_df[['rmw100','pstore100','speed100','vstore100']]
+histdf = histdf.merge(track_df_hist, left_index=True, right_index=True, how='left')
 
 ###################################################################################################################
 # Load the projected/future TC data
@@ -42,39 +47,42 @@ futdf = futdf[sel_cols]
 track_table_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\CMIP6_585\tracks\canesm_landfall_track_info.csv'
 track_df = pd.read_csv(track_table_filepath, index_col=0)
 track_df.set_index('tc_id', inplace=True, drop=True)
-track_df = track_df[['rmw100','pstore100','speed100','vstore100']]
+track_df_fut = track_df[['rmw100','pstore100','speed100','vstore100']]
 
 ###################################################################################################################
 df = futdf
 clim = 'CANESM'
+track_df = track_df_fut
 
 sections = {
     'Track': ['rmw100','pstore100','speed100','vstore100'],
     'Wind': ['maxWS', 'meanMaxWS'],
     'Rainfall': ['MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR', 'AvgmaxRR'],
-    'Hazard': ['stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm', 'Runoff_Area_sqkm'],
+    'Hazard': ['stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm', 'Runoff_Area_sqkm','Total_Area_sqkm'],
 }
 display_names = {
-    'rmw100': 'Radius Max WSpd',
-    'pstore100': 'Min Cent. Press.',
-    'speed100': 'Translation Spd',
-    'vstore100': 'Max Sust. WSpd',
-    'maxWS': 'Max WSpd',
-    'meanMaxWS': 'Avg Max WSpd',
-    'MeanTotPrecipMM': 'Avg Tot Precip',
-    'MaxTotPrecipMM': 'Max Tot Precip',
-    'maxRR': 'Max Rain Rate',
-    'AvgmaxRR': 'Avg Max Rain Rate',
+    'rmw100': 'RMW',
+    'pstore100': 'MCP',
+    'speed100': 'TS',
+    'vstore100': 'Max SWS',
+    'maxWS': 'Max WS',
+    'meanMaxWS': 'Avg Max WS',
+    'MeanTotPrecipMM': 'Avg TP',
+    'MaxTotPrecipMM': 'Max TP',
+    'maxRR': 'Max RR',
+    'AvgmaxRR': 'Avg Max RR',
     'stormtide': 'Storm Tide',
-    'Coastal_Area_sqkm': 'Coastal Fld',
-    'Runoff_Area_sqkm': 'Runoff Fld',
-    'Compound_Area_sqkm': 'Compound Fld',
-    'Total_Area_sqkm': 'Total Fld'
+    'Coastal_Area_sqkm': 'Coastal',
+    'Runoff_Area_sqkm': 'Runoff',
+    'Compound_Area_sqkm': 'Compound',
+    'Total_Area_sqkm': 'Total'
 }
 group_sizes = [len(v) for v in sections.values()]
 ordered_cols = [col for group in sections.values() for col in group]
 pval_lim = 0.01
 
+rho_matrix_list = []
+pval_matrix_list = []
 # --- Main loop ---
 for basin_name, group in df.groupby('basin'):
     print(f"\n🔹 Basin: {basin_name}")
@@ -98,14 +106,19 @@ for basin_name, group in df.groupby('basin'):
     # Reorder and filter for significance
     rho_matrix = rho_matrix.loc[ordered_cols, ordered_cols]
     pval_matrix = pval_matrix.loc[ordered_cols, ordered_cols]
+
+    rho_matrix.to_csv(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}.csv'))
+    pval_matrix.to_csv(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}_pvalue.csv'))
+
+    rho_matrix_list.append(rho_matrix)
+    pval_matrix_list.append(pval_matrix)
+
+    # Plotting below
     sig_rho = rho_matrix.mask(pval_matrix >= pval_lim)
-
-
     xticklabels = [display_names.get(col, col) for col in ordered_cols]
     yticklabels = [display_names.get(col, col) for col in ordered_cols]
 
-    # Plot
-    plt.figure(figsize=(8, 6.5))
+    plt.figure(figsize=(6, 5))
     ax = sns.heatmap(sig_rho, cmap='coolwarm', annot=True, fmt=".2f", center=0, annot_kws={'size': 7},
                      linewidths=1, linecolor='white', cbar=True, square=False,
                      vmin=-1, vmax=1,
@@ -124,7 +137,7 @@ for basin_name, group in df.groupby('basin'):
         mid = start + group_len / 2 - 0.5
         n = len(ordered_cols)
         # Add labels outside the heatmap
-        ax.text(-3.5, mid, label, va='center', ha='center', fontsize=10, fontweight='bold', rotation=90)
+        ax.text(-3.75, mid, label, va='center', ha='center', fontsize=10, fontweight='bold', rotation=90)
         ax.text(mid, n + 5, label, va='bottom', ha='center', fontsize=10, fontweight='bold', rotation=0)
 
     # Section start positions
@@ -151,8 +164,42 @@ for basin_name, group in df.groupby('basin'):
     plt.savefig(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}_pvalue{pval_lim}_labeled.png'), dpi=300, bbox_inches='tight')
     plt.close()
 
+vars = ['Compound_Area_sqkm', 'Runoff_Area_sqkm','Coastal_Area_sqkm','Total_Area_sqkm']
+for v in vars:
+    fig, axes = plt.subplots(nrows=3, ncols=2, figsize=(8, 8),
+                             sharex=True, sharey=True,
+                             constrained_layout=True)
+    axes = axes.flatten()
+    basins = df['basin'].unique()
+    for i in range(len(basins)):
+        basin_name = basins[i]
+        data = df[df['basin'] == basin_name]
+        data = pd.concat([data, track_df], axis=1)
 
+        data = data.select_dtypes(include='number').dropna()
+        data_sorted = data.sort_values(by=v)
+        log_colors = np.log10(data_sorted[v])
 
+        ax = axes[i]
+        sc = ax.scatter(x=data_sorted['speed100'],
+                         #y=data_sorted['rmw100'],
+                        y=data_sorted['vstore100'],
+                         c=log_colors,
+                         cmap='Reds'
+                         )
 
+        ax.set_title(basin_name)
+        # Set x/y labels only on bottom row and left column
+        if i >= len(axes) - 2:  # bottom row
+            ax.set_xlabel('Translation Speed (m/s)')
+        if i % 2 == 0:  # left column
+            #ax.set_ylabel('Radius of Max Winds (km)')
+            ax.set_ylabel('Max Sustained\nWind Speed (knots)')
+
+    # Add a single colorbar for all subplots
+    fig.colorbar(sc, ax=axes, location='right', label=f'log10({v})')
+    plt.show()
+    plt.savefig(f'{v}.png', dpi=300)
+    plt.close()
 
 

@@ -10,23 +10,32 @@ import hydromt
 def sort_data(data: xr.DataArray) -> [xr.DataArray, xr.DataArray]:
     # Sort data using Dask's map_blocks to sort each chunk
     def sort_block(block):
-        sorted_block = np.sort(block, axis=0)
+        sorted_block = np.sort(block, axis=0) # ascending order from smallest to largest value
         sorted_block = xr.DataArray(sorted_block, coords=block.coords)
+        # smallest values are at the top (lowest index)
         return sorted_block
 
-    # Fill the nan values otherwise these will be considered as the largest
-    # Sort all the water level data across the grid
-    # Add the sorted data back to a data array, Fill back in the np.nans
+
     print('Sorting data...')
+
+    # Fill NaNs with a placeholder so they don't interfere with sorting
     data_filled = data.fillna(-9999.0)
+
+    # Apply block-wise sort across 'tc_id'
     sorted_data = data_filled.chunk({'tc_id': -1, 'y': 300, 'x': 300}).map_blocks(sort_block, template=data_filled)
+
+    # Replace placeholders back with NaN
     sorted_data = sorted_data.where(sorted_data != -9999.0, np.nan)
 
-    # Get the rank and add this to arrays
+    # Assign descending rank: largest value = rank 1
     n_storms = len(sorted_data)
     rank = np.arange(1, n_storms + 1)[::-1]
+
+    # Assign new 'rank' coordinate in place of 'tc_id'
     sorted_data['tc_id'] = rank
     sorted_data = sorted_data.rename({'tc_id':'rank'})
+
+    # Preserve spatial_ref if present
     sorted_data['spatial_ref'] = data['spatial_ref']
     sorted_data.compute()
 
@@ -45,16 +54,20 @@ ds_list = [xr.open_dataarray(file, chunks={'x': 300, 'y': 300, 'tc_id': 25},
                              engine='netcdf4').to_dataset(dim='scenario') for file in file_paths]
 ds = xr.concat(ds_list, dim='tc_id')
 scenarios =['compound', 'runoff', 'coastal']
+
+# Loop over SFINCS scenarios
 for scenario in scenarios:
     sorted_wl_file = rf'.\aep\ncep_MaxWL_probabilities_{scenario}.nc'
+
     if os.path.exists(sorted_wl_file) is False:
         # Select the data for the specific scenario
         data = ds[scenario].chunk(dict(tc_id=-1))
 
-        # Sort the water levels
+        # Sort and assign ECDF probabilities
         sorted_data = sort_data(data=data)
 
-        # Calculate ECDF and add to the data array
+        # Non-exceedance probability: P(X <= x)
+        # Descending rank = largest gets rank 1
         probability = sorted_data['rank'] / (len(sorted_data) + 1)
         sorted_data = sorted_data.assign_coords(probability=('rank', probability))
 

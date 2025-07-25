@@ -10,7 +10,6 @@ from shapely.geometry import LineString
 from pathlib import Path
 from typing import Self
 from hydromt_sfincs import SfincsModel
-from sfincs.post_processing.mask_zsmax import dep_sbg
 from src.utils import process_tmax_in_hours, calculate_station_highTide_time
 from scipy import ndimage
 import time

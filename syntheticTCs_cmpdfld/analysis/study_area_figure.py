@@ -46,6 +46,19 @@ chunks_size = {'x': 5000, 'y': 5000}
 elevation_da = mod.grid['dep']
 elevation_da.name = 'gnd_elevation'
 
+# Load layers - run once because it takes a while...
+coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
+coastal_wb = coastal_wb.to_crs(mod.crs)
+coastal_wb_clip = coastal_wb.clip(mod.region)
+
+major_rivers = mod.data_catalog.get_geodataframe('carolinas_nhd_area_rivers')
+major_rivers = major_rivers.to_crs(mod.crs)
+major_rivers_clip = major_rivers.clip(mod.region)
+
+nc_major_rivers = mod.data_catalog.get_geodataframe('carolinas_major_rivers')
+nc_major_rivers = nc_major_rivers.to_crs(mod.crs)
+nc_major_rivers_clip = nc_major_rivers.clip(mod.region)
+
 # Load the ADCIRC poinst
 adcirc_locs = cat.get_geodataframe(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\stormTide\coastline_lores_NCSC.shp',
                                    geom=clip_geom.buffer(distance=15*1000))
@@ -99,7 +112,11 @@ for value in unique_values:
 
 # Add other layers and features
 states.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1)
-mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=2, zorder=1)
+coastal_wb_clip.plot(ax=ax, color='steelblue', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=0.5)
+major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=1)
+nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=1)
+basins.plot(ax=ax, color='none', edgecolor='black', linewidth=0.35, zorder=2)
+mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=2, zorder=2)
 legend_patches.append(mpatches.Patch(facecolor='none', edgecolor='black',linewidth=2, label='Model Domain'))
 adcirc_locs.plot(ax=ax, color='lightgrey', edgecolor='black', zorder=2, markersize=18, label='ADCIRC Gages')
 adcirc_patch = Line2D(
@@ -152,7 +169,9 @@ ax.legend(handles=legend_patches, loc='lower right', title=None, fontsize='mediu
 
 plt.subplots_adjust(wspace=0, hspace=0)
 plt.margins(x=0, y=0)
-plt.savefig(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\study_area_fig.png', dpi=300)
+plt.savefig(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\study_area_fig.png',
+            bbox_inches='tight',
+            dpi=300)
 plt.close()
 
 

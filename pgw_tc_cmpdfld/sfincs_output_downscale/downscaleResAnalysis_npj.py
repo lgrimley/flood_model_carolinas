@@ -13,10 +13,7 @@ import pandas as pd
 import numpy as np
 import dask.array
 
-start_time = time.time()
 
-# code upgrades that need to happen
-# combine/consolidate the flood area calculation and getting the flood depths
 
 def compare_da_dimensions(da1, da2):
     m1 = mask.dims == rda_zsmax.dims
@@ -55,7 +52,7 @@ def resized_gridded_output(da_source: xr.DataArray, da_target: xr.DataArray,
 
     return(rda)
 
-
+start_time = time.time()
 wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final'
 os.chdir(wdir)
 
@@ -64,7 +61,7 @@ data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Car
 yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml, yml_base])
 # Read in the data catalog to get the model and basin geom
-basins = cat.get_geodataframe(data_like=r'.\downscale_test\masks\huc6_basins.shp')
+basins = cat.get_geodataframe(data_like=r'.\03_downscaled\masks\huc6_basins.shp')
 basins = basins.to_crs(epsg=32617)
 
 # Data specifics
@@ -74,7 +71,7 @@ hmin = 0.05
 
 '''' Create basin and water body masks if they don't exist '''
 
-water_mask = rf'.\downscale_test\masks\water_mask_sbgRes{res}m.tif'
+water_mask = rf'.\03_downscaled\masks\water_mask_sbgRes{res}m.tif'
 if os.path.exists(water_mask) is False:
     dep = cat.get_rasterdataset(rf'..\..\..\sfincs\subgrid\dep_subgrid_{res}m.tif')
 
@@ -97,93 +94,16 @@ if os.path.exists(water_mask) is False:
     mask.raster.to_raster(water_mask, nodata=0)
 
 # Create a basin mask raster at the subgrid resolution
-basin_mask = rf'.\downscale_test\masks\basin_mask_sbgRes{res}m.tif'
+basin_mask = rf'.\03_downscaled\masks\basin_mask_sbgRes{res}m.tif'
 if os.path.exists(basin_mask) is False:
     dep = cat.get_rasterdataset(rf'..\..\..\sfincs\subgrid\dep_subgrid_{res}m.tif')
     mask = dep.raster.rasterize(basins, 'index', nodata=-128, all_touched=False)
     mask.rio.write_crs('EPSG:32617', inplace=True)
     mask.raster.to_raster(basin_mask, nodata=-128, dtype='int8')
 
-calc_fld_extent = False
-if calc_fld_extent is True:
-    for clim in ['present', 'future']:
-        for storm in ['flor','matt','floy']:
-            start_time = time.time()
-            mdf = pd.DataFrame()
-            for i in range(len(basins.index)):
-                clip_geom = basins[basins.index == i]
-
-                wb_mask = cat.get_rasterdataset(water_mask, crs=32617, chunks=chunks_size, geom=basins)
-                basin_mask = cat.get_rasterdataset(basin_mask, crs=32617, chunks=chunks_size, geom=clip_geom)
-
-                if clim == 'future':
-                    # Load in the full data
-                    zsmax_ds = cat.get_rasterdataset(os.path.join(wdir,'ensemble_mean','fut_ensemble_zsmax_mean.nc'),
-                                                     geom=clip_geom, chunks=chunks_size)
-                    attr_ds = cat.get_rasterdataset(os.path.join(wdir,'ensemble_mean','processes_classified_ensmean_mean.nc'),
-                                                    crs=32617, geom=clip_geom, chunks=chunks_size)
-                    # Selected run, mask out data beyond the shapefile
-                    zsmax_da = zsmax_ds.sel(run=f'{storm}_fut_compound_mean')
-                    attr_da = attr_ds.sel(run=f'{storm}_fut_ensmean')
-                else:
-                    # Load in the full data
-                    zsmax_ds = cat.get_rasterdataset('pgw_zsmax.nc', geom=clip_geom, chunks=chunks_size)
-                    attr_ds = cat.get_rasterdataset(os.path.join(wdir,'process_attribution','processes_classified.nc'),
-                                                    crs=32617, geom=clip_geom, chunks=chunks_size)
-                    # Selected run, mask out data beyond the shapefile
-                    zsmax_da = zsmax_ds.sel(run=f'{storm}_pres_compound')
-                    attr_da = attr_ds.sel(run=f'{storm}_pres')
-
-                elevation_da = cat.get_rasterdataset(rf'..\..\..\sfincs\subgrid\dep_subgrid_{res}m.tif',
-                                                     geom=clip_geom, chunks=chunks_size)
-                # Regrid the data
-                print('Working to regrid the data...')
-                rda_zsmax = resized_gridded_output(da_source=zsmax_da,da_target=elevation_da, output_type='float32')
-                rda_attr = resized_gridded_output(da_source=attr_da, da_target=elevation_da, output_type='int8')
-
-                # Mask out the data we don't want to deal with
-                rda_zsmax_mask1 = rda_zsmax.where(basin_mask.data == i)
-                rda_zsmax_mask2 = rda_zsmax_mask1.where(wb_mask.data != 1)
-
-                # Keep elevations above the ground
-                zsmask = (rda_zsmax_mask2.data > elevation_da.data)   # np.nan cells return false
-                rda_zsmax = rda_zsmax_mask2.where(zsmask)
-
-                # Load the data array into memory
-                rda_attr = rda_attr.where(zsmask).astype(dtype='int8').compute()
-
-                data = rda_attr
-                expected_values = [1, 2, 3, 4] # Define unique integer values you expect
-                counts = {}
-                for val in expected_values:
-                    # Mask where data == val, skipping NaNs
-                    mask = (data == val) & ~dask.array.isnan(data)
-
-                    # Convert to integers (True=1, False=0) and sum
-                    count = mask.sum().compute()
-                    counts[val] = int(count)
-
-                name = clip_geom['Name'].item()
-                df = pd.DataFrame(list(counts.items()), columns=['Value', f'{name}'])
-                df.set_index('Value', inplace=True, drop=True)
-
-                mdf = pd.concat(objs=[mdf,df], axis=1, ignore_index=False)
-                print(f'Done with {name}')
-
-                end_time = time.time()
-                elapsed_time = end_time - start_time
-                print(f"Elapsed time: {elapsed_time} seconds")
-
-
-            fld_cells = mdf
-            fld_area = fld_cells * (res * res) / (1000 ** 2)  # square km
-            fld_area = fld_area.round(2)
-            fld_area = fld_area.T
-            fld_area.columns=['Coastal','Coastal-Compound','Runoff','Runoff-Compound']
-            fld_area['Total'] = fld_area.sum(axis=1)
-            fld_area['Compound'] = fld_area[['Coastal-Compound','Runoff-Compound']].sum(axis=1)
-            fld_area.to_csv(rf'.\downscale_test\{storm}_{clim}_fld_area_{res}m.csv')
-
+''' Calculate Areas for Pie Chart '''
+# This calculates the area for each process using the corrected code for the present and future ensemble mean
+# outputs can be used to compare areas for various downscale resolutions (5, 20, 200m) and create Figure 5
 calc_fld_depths = True
 if calc_fld_depths is True:
     clip_geom = basins
@@ -263,7 +183,7 @@ if calc_fld_depths is True:
 
             # Output hmax tif for checking
             name = f'{storm}_{clim}'
-            hmax_masked.raster.to_raster(fr'.\downscale_test\depths\{name}_hmax_sbgRes{res}m.tif', nodata=np.nan)
+            #hmax_masked.raster.to_raster(fr'.\downscale_test\depths\{name}_hmax_sbgRes{res}m.tif', nodata=np.nan)
 
             # Get the depth data for the entire domain and calculate stats
             print('Pulling all depths and calculating percentiles...')
@@ -296,11 +216,9 @@ if calc_fld_depths is True:
             mdf = mdf.T
             mdf['Area_sqkm'] = (mdf['count'] * res * res) / (1000 **2)
             mdf.to_csv(fr'.\downscale_test\depths\{name}_depth_stats_sbgRes{res}m.csv')
-
-
-end_time = time.time()
-elapsed_time = end_time - start_time
-print(f"Elapsed time for entire script: {elapsed_time} seconds")
+    end_time = time.time()
+    elapsed_time = end_time - start_time
+    print(f"Elapsed time for entire script: {elapsed_time} seconds")
 
 # for i in range(len(basins.index)):
 #     basin_name = basins['Name'].loc[i]
@@ -313,6 +231,7 @@ print(f"Elapsed time for entire script: {elapsed_time} seconds")
 #     print(f'Done with {name} attr code {val} for {basin_name}')
 
 
+''' Combine area calcs for the 5, 20, 200m resolutions in a single CSV '''
 wd = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\downscale_test\depths'
 dfs = []
 for res in [5, 20, 200]:
@@ -323,11 +242,119 @@ for res in [5, 20, 200]:
         df = pd.read_csv(f, index_col=0)
         df['gridRes'] = res
         dfs.append(df)
-
 combined_df = pd.concat(dfs, axis=0, ignore_index=False)
-
-
 split_index = combined_df.index.str.split('_', expand=True)
 combined_df.index = pd.MultiIndex.from_tuples(split_index, names=['storm', 'climate', 'attrCode'])
 combined_df = combined_df.round(3)
 combined_df.to_csv('downscale_comparsion_depth_fldArea.csv')
+
+
+
+# This calculates the area for each process using the corrected code for each run (create Supp Fig 3 boxplot)
+calc_fld_depths_all_runs = True
+if calc_fld_depths_all_runs is True:
+    clip_geom = basins
+    wb_mask = cat.get_rasterdataset(water_mask, crs=32617, chunks=chunks_size, geom=clip_geom)
+    basin_mask = cat.get_rasterdataset(basin_mask, crs=32617, chunks=chunks_size, geom=clip_geom)
+
+    keys = []
+    for storm in ['flor', 'floy', 'matt']:
+        k = [f'{storm}_pres_compound', f'{storm}_pres_runoff', f'{storm}_pres_coastal']
+        keys.append(k)
+    for storm in ['flor', 'floy', 'matt']:
+        nruns = 8
+        if storm == 'matt':
+            nruns = 7
+        for sf in np.arange(1, nruns, 1):
+            for slr in np.arange(1, 6, 1):
+                n = f'{storm}_fut_SF{sf}_SLR{slr}'
+                k = [f'{n}_compound', f'{storm}_fut_SF{sf}_runoff', f'{n}_coastal']
+                keys.append(k)
+
+    kdf = pd.DataFrame()
+    for k in keys:
+        compound_key, runoff_key, coastal_key = k
+        name = '_'.join(compound_key.split('_')[:-1])
+
+        # Load in the full data
+        zsmax_ds = cat.get_rasterdataset('pgw_zsmax.nc', geom=clip_geom, chunks=chunks_size)
+        attr_ds = cat.get_rasterdataset(os.path.join(wdir, 'process_attribution', 'processes_classified.nc'),
+            crs=32617, geom=clip_geom, chunks=chunks_size)
+
+        zsmax_da = zsmax_ds.sel(run=compound_key)
+        attr_da = attr_ds.sel(run=name)
+
+        elevation_da = cat.get_rasterdataset(rf'..\..\..\sfincs\subgrid\dep_subgrid_{res}m.tif',
+                                             geom=clip_geom, chunks=chunks_size)
+
+        if elevation_da.shape == zsmax_da.shape is True:
+            print('Elevation DEM and water level output have the same shape.')
+            rda_zsmax = zsmax_da
+            rda_attr = attr_da
+        else:
+            # Regrid the data
+            print('Working to regrid the data...')
+            rda_zsmax = resized_gridded_output(da_source=zsmax_da, da_target=elevation_da, output_type='float32')
+            rda_attr = resized_gridded_output(da_source=attr_da, da_target=elevation_da, output_type='int8')
+            rda_zsmax = rda_zsmax.drop_vars('run')
+            rda_attr = rda_attr.drop_vars('run')
+
+        elevation_da.name = 'gnd_elevation'
+        rda_zsmax.name = 'zsmax'
+        rda_attr.name = 'attr'
+        wb_mask.name = 'wb_mask'
+        basin_mask.name = 'basin_mask'
+
+        print('Masking and calculating...')
+        # Mask out the water body grid cells (wb cell == 1)
+        mask = (wb_mask != 1)
+        zsmax_masked = rda_zsmax.where(mask)
+        # Mask out water levels below the ground elevation
+        zsmax_masked = zsmax_masked.where(zsmax_masked > elevation_da)
+        zsmax_masked.rio.write_crs(32617, inplace=True)
+
+        # Calculate the depth above the ground
+        # Mask out depths smaller than the selected threshold
+        # Mask out the really large depths -- quarries or from model edge along the coastline
+        hmax = (zsmax_masked - elevation_da)
+        hmax.rio.write_crs(32617, inplace=True)
+        mask = (hmax > hmin) & (hmax <= 10)
+        hmax_masked = hmax.where(mask)
+        hmax_masked.rio.write_crs(32617, inplace=True)
+
+        # Mask out the attribution code data array
+        attr_masked = rda_attr.where(mask).astype(dtype='int8')
+        attr_masked.rio.write_crs(32617, inplace=True)
+
+        # Get the depth data for the entire domain and calculate stats
+        print('Pulling all depths and calculating percentiles...')
+        depths = hmax_masked.values
+        depths = pd.DataFrame(depths[~np.isnan(depths)])
+        df = depths.describe(percentiles=[0.5, 0.9, 0.95])
+
+        # Now loop through and calculate the depth stats and extent for the 3 flood processes
+        stat_ls = [df]
+        stat_id = [name]
+        expected_values = [1, 2, 3]  # 1 = coastal, 2 and 4 = compound, 3 = runoff
+        for val in expected_values:
+            # Mask where data == val, skipping NaNs
+            if val == 2:
+                mask_attr = (attr_masked == val) | (attr_masked == 4) & ~dask.array.isnan(hmax_masked)
+            else:
+                mask_attr = (attr_masked == val) & ~dask.array.isnan(hmax_masked)
+
+            depths = hmax_masked.where(mask_attr).values
+            depths = pd.DataFrame(depths[~np.isnan(depths)])
+            stats = depths.describe(percentiles=[0.5, 0.9, 0.95])
+
+            stat_id.append(f'{name}_attr{val}')
+            stat_ls.append(stats)
+            print(f'Done with {name} attr code {val}')
+
+        # Save the depth stats and flood extent for the storm to a csv
+        df = pd.concat(objs=stat_ls, axis=1, ignore_index=False)
+        df.columns = stat_id
+        kdf = pd.concat(objs=[kdf,df], axis=1, ignore_index=False)
+kdf = kdf.T
+kdf['Area_sqkm'] = (kdf['count'] * res * res) / (1000 **2)
+kdf.to_csv(fr'.\03_downscaled\sbgRes200m\all_runs_stats_sbgRes{res}m.csv')

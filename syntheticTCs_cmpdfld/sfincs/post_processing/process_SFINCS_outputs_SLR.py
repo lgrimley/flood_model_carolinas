@@ -1,33 +1,31 @@
 import os
-
-import hydromt
 import xarray as xr
 from hydromt_sfincs import SfincsModel
 from pathlib import Path
 import pandas as pd
-import numpy as np
 import sys
-sys.path.append(r'C:\Users\lelise\Documents\GitHub\flood_model_carolinas\syntheticTCs_cmpdfld')
+sys.path.append(r'/')
 from src.core import TCFloodHazard
 import time
 
-
-# Load SFINCS model for importing results
-yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
-base_root = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\sfincs_initcond_mod'
-sfincs_mod = SfincsModel(root=base_root, mode='r', data_libs=yml_base)
-sfincs_mod.read() # for some reason this has to be run twice for the code to work below
-
-# Change the directory to the model results
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs')
+
+# Plot
+yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
+base_root = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL_RUNS\sfincs_initcond_mod'
+sfincs_mod = SfincsModel(root=base_root, mode='r', data_libs=yml_base)
+cat = sfincs_mod.data_catalog
+sfincs_mod.read() # for some reason this has to be run twice for the code to work below
 
 run_group = 'canesm_ssp585' # 'ncep'
 foldname = 'CMIP6_585' #'NCEP_Reanalysis'
-root = Path(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL\{run_group}_runs\completed_runs_SLR112cm')
-tc_ids = [int(x.split('_')[-1]) for x in os.listdir(root)]
+root = Path(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL_RUNS\{run_group}_runs\completed_runs_SLR112cm')
+#tc_ids = [int(x.split('_')[-1]) for x in os.listdir(root)]
+tc_ids = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\05_SLR\subset_v2\SLR_storm_TCIDs.csv',
+                      index_col=0)['0'].tolist()
 group_info = 'canesm_slr'
 
-outputdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS'
+outputdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS\slr_runs'
 outdir = os.path.join(outputdir, f'{run_group}_SRL112cm')
 
 if os.path.exists(outdir) is False:
@@ -56,7 +54,7 @@ for tc_index in tc_ids:
                     keep_ids.append(f'{tc_index}_{x}')
 
                 r = TCFloodHazard(tc_root=Path(tc_root), sfincs_mod = sfincs_mod, tc_index=tc_index, tracks=run_group,
-                                  zsmax_threshold=0.2, scenarios_dict=scenarios_dict)
+                                  zsmax_threshold=0.05, scenarios_dict=scenarios_dict)
 
                 r.scenario_results.attrs['SLR'] = x
                 scenario_results.append(r.scenario_results)
@@ -76,17 +74,17 @@ attrs = {
     'description': f'Modeled SFINCS ouputs for {group_info}',
     'track_model' : run_group,
     'author': 'Lauren Grimley',
-    'date_created' : '3/17/2025'
+    'date_created' : '6/9/2025'
 }
 
-# ds1 = xr.concat(objs=scenario_results, dim='tc_id')
-# ds1['tc_id'] = xr.IndexVariable(dims='tc_id', data=keep_ids)
-# var = 'zsmax'
-# outfilepath = os.path.join(outdir, f'{var}_{group_info}.nc')
-# print(f'Writing {var}...')
-# dsout = ds1[var]
-# dsout.attrs = attrs
-# dsout.to_netcdf(outfilepath)
+ds1 = xr.concat(objs=scenario_results, dim='tc_id')
+ds1['tc_id'] = xr.IndexVariable(dims='tc_id', data=keep_ids)
+var = 'zsmax'
+outfilepath = os.path.join(outdir, f'{var}_{group_info}.nc')
+print(f'Writing {var}...')
+dsout = ds1[var]
+dsout.attrs = attrs
+dsout.to_netcdf(outfilepath)
 
 ds2 = xr.concat(objs=attribution_results, dim='tc_id')
 ds2['tc_id'] = xr.IndexVariable(dims='tc_id', data=keep_ids)#group['tc_id'].values)

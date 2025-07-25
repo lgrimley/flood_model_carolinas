@@ -50,7 +50,7 @@ def clean_up_slr_tables(filepath):
 
     return df_wide
 
-filepath = r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm\hmin0.05\canesm_slr_sbg20m_hmin0.05.csv'
+filepath = r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm_v2\canesm_slr_sbg20m_hmin0.05.csv'
 df = clean_up_slr_tables(filepath=filepath)
 outdir = r'.\05_ANALYSIS\05_SLR'
 
@@ -79,7 +79,7 @@ if plot_SLR_violin is True:
         df_long_basin = df_long[df_long['basin'] != 'Domain']
 
         # Create axes using GridSpec
-        yaxis_lim = [(-100, 6000), (-100, 2700), (-100, 2000), (-100, 8000)]
+        yaxis_lim = [(-100, 6000), (-100, 2200), (-100, 2200), (-100, 6500)]
         basin_order = ['LPD', 'CapeFear', 'OnslowBay', 'Neuse', 'Pamlico']
         ax1 = fig.add_subplot(gs[i, 0])  # First column (2/3 of the space)
         sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_basin,
@@ -96,9 +96,10 @@ if plot_SLR_violin is True:
                        common_norm=True,
                        linecolor='none',
                        zorder=1,
-                       palette={'NoSLR': 'grey', 'SLR': 'seagreen'},
+                       palette={'NoSLR': 'darkgoldenrod', 'SLR': 'darkseagreen'},
                        inner=None,
-                       cut=0
+                       cut=0,
+                       alpha=0.7
                        )
 
         # Loop to calculate and plot 90th percentiles
@@ -109,6 +110,7 @@ if plot_SLR_violin is True:
                     p10 = np.percentile(subset['data_value'], 10)
                     p90 = np.percentile(subset['data_value'], 90)
                     median = np.percentile(subset['data_value'], 50)
+                    mean = np.mean(subset['data_value'])
 
                     # X-position adjustment for split violin
                     offset = -0.2 if period == 'NoSLR' else 0.2
@@ -119,6 +121,9 @@ if plot_SLR_violin is True:
 
                     # Draw a horizontal line for the median
                     ax1.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
+
+                    # Draw the mean as point
+                    #ax1.scatter(x, mean, facecolors='none', edgecolors='black', s=50, zorder=3)
 
         ax1.set_ylim(yaxis_lim[i])
         pos = ax1.get_position()  # Get the axis position
@@ -139,7 +144,7 @@ if plot_SLR_violin is True:
         # Plot for the second subplot in the second column (1/3 space)
         ax2 = fig.add_subplot(gs[i, 1])  # Second column (1/3 of the space)
         basin_order = ['Domain']
-        yaxis_lim = [(-100, 10000), (-100, 4500), (-100, 4500), (-100, 17000)]
+        yaxis_lim = [(-100, 12000), (-100, 4500), (-100, 5000), (-100, 18000)]
         sns.violinplot(x='basin', y='data_value', hue='Period', data=df_long_domain,
                        ax=ax2,
                        split=True,
@@ -153,9 +158,10 @@ if plot_SLR_violin is True:
                        common_norm=True,
                        linecolor='none',
                        zorder=1,
-                       palette={'NoSLR': 'grey', 'SLR': 'seagreen'},
+                       palette={'NoSLR': 'darkgoldenrod', 'SLR': 'darkseagreen'},
                        inner=None,
-                       cut=0
+                       cut=0,
+                       alpha=0.7
                        )
 
         # Loop to calculate and plot 90th percentiles
@@ -166,7 +172,7 @@ if plot_SLR_violin is True:
                     p5 = np.percentile(subset['data_value'], 5)
                     p95 = np.percentile(subset['data_value'], 95)
                     median = np.percentile(subset['data_value'], 50)
-
+                    mean = np.mean(subset['data_value'])
                     # X-position adjustment for split violin
                     offset = -0.2 if period == 'NoSLR' else 0.2
                     x = ii + offset
@@ -176,6 +182,8 @@ if plot_SLR_violin is True:
 
                     # Draw a horizontal line for the median
                     ax2.plot([x - 0.05, x + 0.05], [median, median], color='black', lw=2, zorder=2)
+                    # Draw the mean as point
+                    #ax2.scatter(x, mean, facecolors='none', edgecolors='black', s=50, zorder=3)
 
         ax2.set_ylim(yaxis_lim[i])
         ax2.grid(True, which='major', axis='y', linestyle='--', linewidth=0.75, color='lightgray', zorder=0)

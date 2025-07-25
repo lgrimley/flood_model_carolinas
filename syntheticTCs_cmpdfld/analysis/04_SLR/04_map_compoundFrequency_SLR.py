@@ -5,6 +5,7 @@ import matplotlib.pyplot as plt
 import os
 import cartopy.crs as ccrs
 from hydromt_sfincs import SfincsModel
+import shapely
 sys.path.append(r'/')
 mpl.use('TkAgg')
 plt.ion()
@@ -57,9 +58,9 @@ basin_mask.rio.write_crs(proj_crs, inplace=True)
 basin_mask.name = 'basin_mask'
 ##################################################################################################################
 hmin= 0.05
-zsmax_ds = xr.open_dataset(r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm\zsmax_canesm_slr.nc',
+zsmax_ds = xr.open_dataset(r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm_v2\zsmax_canesm_slr.nc',
                            chunks=chunks_size)
-attr_ds = xr.open_dataset(r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm\hmin0.05\attribution_canesm_slr_0.05m.nc',
+attr_ds = xr.open_dataset(r'.\04_MODEL_OUTPUTS\slr_runs\canesm_ssp585_SRL112cm_v2\attribution_canesm_slr_0.05m.nc',
                           chunks=chunks_size)
 
 # Selected run, mask out data beyond the shapefile
@@ -122,6 +123,7 @@ data_mask = (cmpd_slr != 0) & (cmpd_noslr != 0)
 diff = cmpd_slr - cmpd_noslr
 diff2 = diff.where(data_mask)
 #diff = xr.where(mask, np.nan, diff)
+#diff2.raster.to_raster(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\05_SLR\version2_TCs_127\cmpd_freq_SLR.tif')
 
 # Load layers - run once because it takes a while...
 coastal_wb = mod.data_catalog.get_geodataframe('carolinas_coastal_wb')
@@ -138,54 +140,117 @@ nc_major_rivers_clip = nc_major_rivers.clip(mod.region)
 
 ##################################################################################################################
 # PLOT
-perc = diff2/189
+perc = diff2/max_num
 
-fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(5,4), subplot_kw={'projection': utm}, tight_layout=True)
-cmap = plt.cm.get_cmap('coolwarm', 5)
-c = [cmap(i) for i in range(cmap.N)]
-cmap = mpl.colors.ListedColormap(c)
-bounds = [-0.5, -0.25, -0.01, 0.01, 0.25, 0.5]
-norm = mpl.colors.BoundaryNorm(bounds, cmap.N, extend='neither')
+plot_full_domain = True
+if plot_full_domain is True:
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(5,4), subplot_kw={'projection': utm}, tight_layout=True)
+    cmap = plt.cm.get_cmap('BrBG', 5)
+    c = [cmap(i) for i in range(cmap.N)]
+    cmap = mpl.colors.ListedColormap(c)
+    bounds = [-0.5, -0.25, -0.01, 0.01, 0.25, 0.5]
+    norm = mpl.colors.BoundaryNorm(bounds, cmap.N, extend='neither')
 
-cs = perc.plot(ax=ax,
-               cmap=cmap,
-               norm=norm,
-               extend='neither',
-               shading='auto',
-               add_colorbar=False,
-               zorder=2, alpha=1)
-ax.set_title('')
-ax.set_aspect('equal')
-ax.set_axis_off()
-major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
-nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
-coastal_wb_clip.plot(ax=ax, color='white', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
-mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
-#clip_geom.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
+    cs = perc.plot(ax=ax,
+                   cmap=cmap,
+                   norm=norm,
+                   extend='neither',
+                   shading='auto',
+                   add_colorbar=False,
+                   zorder=2, alpha=1)
+    ax.set_title('')
+    ax.set_aspect('equal')
+    ax.set_axis_off()
+    mod.region.plot(ax=ax, color='lightgrey', edgecolor='none', linewidth=0, zorder=0, alpha=0.7)
+    major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    coastal_wb_clip.plot(ax=ax, color='lightblue', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    # major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    # nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    # coastal_wb_clip.plot(ax=ax, color='white', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+    mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
+    #clip_geom.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
 
-#ax.set_title(f'Frequency of Compound Flooding for Storms RP > 80-yr (hmin:{hmin}m)')
-pos0 = ax.get_position()  # get the original position
-cax = fig.add_axes([pos0.x1 + 0.075, pos0.y0 + pos0.height * 0.1, 0.035, pos0.y0 + pos0.height * 0.8])
-cbar = fig.colorbar(cs,
-                     cax=cax,
-                     orientation='vertical',
-                     ticks=[-0.5, -0.25, 0, 0.25, 0.5],
-                     #label='% Compound Frequency'
-                     )
-cbar.ax.set_yticklabels(labels=['50% More Likely\n w/out SLR', '25%', 'Equal Likelihood', '25%', '50% More Likely\nw/ SLR'])
+    #ax.set_title(f'Frequency of Compound Flooding for Storms RP > 80-yr (hmin:{hmin}m)')
+    pos0 = ax.get_position()  # get the original position
+    cax = fig.add_axes([pos0.x1 + 0.075, pos0.y0 + pos0.height * 0.1, 0.035, pos0.y0 + pos0.height * 0.8])
+    cbar = fig.colorbar(cs,
+                         cax=cax,
+                         orientation='vertical',
+                         ticks=[-0.5, -0.25, 0, 0.25, 0.5],
+                         #label='% Compound Frequency'
+                         )
+    cbar.ax.set_yticklabels(labels=['50% More Likely\n w/out SLR', '25%', 'Equal Likelihood', '25%', '50% More Likely\nw/ SLR'])
 
-plt.subplots_adjust(wspace=0.0, hspace=0)
-plt.margins(x=0, y=0)
-plt.savefig(rf'.\05_ANALYSIS\05_SLR\coastal_compound_freq_SLR_map.jpg',
-             bbox_inches='tight', dpi=300)
-plt.close()
+    plt.subplots_adjust(wspace=0.0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.savefig(rf'.\05_ANALYSIS\05_SLR\coastal_compound_freq_SLR_map.jpg',
+                 bbox_inches='tight', dpi=300)
+    plt.close()
 
-#
-# dp = [cmpd_slr.where(cmpd_slr > 0), cmpd_noslr.where(cmpd_noslr > 0), diff2]
-# cc = ['Reds', 'Reds', 'coolwarm']
-# title = ['SLR', 'No SLR', 'SLR minus No SLR']
-#
-# fig, axes = plt.subplots(nrows=3, ncols=1, figsize=(5,6.5),
-#                          subplot_kw={'projection': utm}, tight_layout=True)
-# axes = axes.flatten()
-# for i in range(len(axes)):
+plot_zooms = True
+if plot_zooms is True:
+    zoom_axes = [
+    [631553.4454,3661553.4271,726419.7563,3750231.4836],
+    [727405.6894,3740886.1037,816528.1671,3823974.1323],
+    [809790.9378, 3813936.6586, 935189.4691, 3963545.2488]
+    ]
+    nrow = 1
+    ncol = 1
+    for i in range(len(zoom_axes)):
+        from matplotlib.colors import LinearSegmentedColormap, BoundaryNorm
+        import numpy as np
+        fig, ax = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 6), subplot_kw={'projection': utm}, tight_layout=True)
+        cmap = plt.cm.get_cmap('BrBG', 5)
+        c = [cmap(i) for i in range(cmap.N)]
+        cmap = mpl.colors.ListedColormap(c)
+        #c[2] = (0.5, 0.5, 0.5, 1.0)  # RGBA grey
+        #colors = ['darkgrey', 'seagreen']
+        #cmap = LinearSegmentedColormap.from_list("custom_grey_green", colors)
+
+        # Optional: Discretize the colormap into 5 steps
+        cmap = mpl.colors.ListedColormap([cmap(i) for i in np.linspace(0, 1, 5)])
+        bounds = [-0.5, -0.25, -0.01, 0.01, 0.25, 0.5]
+        norm = mpl.colors.BoundaryNorm(bounds, cmap.N, extend='neither')
+
+        extent = zoom_axes[i]
+        polygon = shapely.geometry.box(*extent)
+        cs = perc.plot(ax=ax,
+                       cmap=cmap,
+                       norm=norm,
+                       extend='neither',
+                       shading='auto',
+                       add_colorbar=False,
+                       zorder=3, alpha=1)
+        ax.set_title('')
+        ax.set_aspect('equal')
+        ax.set_axis_off()
+        mod.region.plot(ax=ax, color='lightgrey', edgecolor='black', linewidth=1, zorder=0, alpha=0.7)
+        major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+        nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+        coastal_wb_clip.plot(ax=ax, color='lightblue', edgecolor='darkgrey', linewidth=0.35, zorder=0, alpha=1)
+        #mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
+        # clip_geom.plot(ax=ax, color='none', edgecolor='black', linewidth=0.75, zorder=3, alpha=1)
+        ax.plot(*polygon.exterior.xy, color='black', linewidth=1.5, zorder=3, alpha=1)
+
+        minx, miny, maxx, maxy = extent
+        ax.set_xlim(minx, maxx)
+        ax.set_ylim(miny, maxy)
+
+        # ax.set_title(f'Frequency of Compound Flooding for Storms RP > 80-yr (hmin:{hmin}m)')
+        pos0 = ax.get_position()  # get the original position
+        cax = fig.add_axes([pos0.x1 + 0.1, pos0.y0 + pos0.height * 0.1, 0.035, pos0.y0 + pos0.height * 0.8])
+        cbar = fig.colorbar(cs,
+                            cax=cax,
+                            orientation='vertical',
+                            ticks=[-0.5, -0.25, 0, 0.25, 0.5],
+                            # label='% Compound Frequency'
+                            )
+        cbar.ax.set_yticklabels(
+            labels=['50% More Likely\n w/out SLR', '25%', 'Equal Likelihood', '25%', '50% More Likely\nw/ SLR'])
+
+        plt.subplots_adjust(wspace=0.0, hspace=0)
+        plt.margins(x=0, y=0)
+        plt.savefig(rf'.\05_ANALYSIS\05_SLR\coastal_compound_freq_SLR_map_zoom{i}.jpg',
+                    bbox_inches='tight', dpi=300)
+        plt.close()

@@ -4,7 +4,15 @@ import pandas as pd
 import matplotlib.pyplot as plt
 from scipy import stats
 import random
-
+import sys
+sys.path.append(r'/')
+import matplotlib as mpl
+mpl.use('TkAgg')
+plt.ion()
+font = {'family': 'Arial', 'size': 10}
+mpl.rc('font', **font)
+mpl.rcParams.update({'axes.titlesize': 10})
+mpl.rcParams["figure.autolayout"] = True
 
 def weighted_sampling_without_replacement(data, weights, num_samples):
     if num_samples > len(data):
@@ -27,8 +35,43 @@ def weighted_sampling_without_replacement(data, weights, num_samples):
 
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\BiasCorrection')
-gcms = ['canesm', 'cnrm6', 'ecearth6', 'ipsl6', 'miroc6']
 
+ncep = pd.read_csv(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\NCEP_Reanalysis\tracks\ncep_landfall_vmax_ZerosRemoved.csv',
+                   index_col=0)
+ncep['vmax'] = ncep['vstore100'].astype(float)
+ncep_sorted = ncep.sort_values(by='vmax', axis=0, ascending=True)
+ncep_cdf = np.arange(1, len(ncep_sorted) + 1) / len(ncep_sorted)
+
+gcm = 'canesm'
+df = pd.read_csv(f'{gcm}_ssp585_weighted.csv', header=None)
+df.columns = ['tc_id','vmax', 'gcm_weight']
+df['vmax'] = df['vmax'].astype(float)
+df['gcm_weight'] = df['gcm_weight'].astype(float)
+df['gcm_tcid'] = [f'{gcm}_{x}' for x in df['tc_id']]
+sorted_data = df.sort_values(by='vmax', axis=0, ascending=True)
+cdf = np.arange(1, len(sorted_data) + 1) / len(sorted_data)
+
+#Plot the Empirical CDF
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(5, 3.5), sharex=True, sharey=True)
+ax.plot(ncep_sorted['vmax'], ncep_cdf,
+        linestyle='-', label='NCEP', linewidth=3, alpha=1, color='grey')
+# ax.plot(sorted_data['vmax'], cdf,
+#         linestyle='-', label='CANESM', alpha=0.7, color='red')
+ax.plot(sorted_data['vmax'], sorted_data['gcm_weight'].cumsum(),
+        linestyle='-', label=f'CANESM Bias Corrected', linewidth=3, alpha=1, color='black')
+ax.set_xlabel('Maximum Sustained Wind Speeds (knots)', fontsize=12)
+ax.set_ylabel('CDF', fontsize=12)
+ax.legend()
+#ax.set_title(f'{gcm}')
+ax.grid(False)
+plt.subplots_adjust(wspace=0, hspace=0)
+plt.margins(0,0)
+plt.savefig(fr'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\02_DATA\BiasCorrection\tc_event_sets_vmax_cdf.png', dpi=300, bbox_inches="tight")
+plt.close()
+
+
+#################################################################################################
+gcms = ['canesm']#, 'cnrm6', 'ecearth6', 'ipsl6', 'miroc6']
 # Combine all the TC tracks and their weights into a single dataframe
 full_set = pd.DataFrame()
 for gcm in gcms:
@@ -55,8 +98,8 @@ for gcm in gcms:
     ax.grid(False)
     plt.subplots_adjust(wspace=0, hspace=0)
     plt.margins(0,0)
-    plt.savefig(fr'track_vmax_cdf_{gcm}.png', dpi=300, bbox_inches="tight")
-    plt.close()
+    #plt.savefig(fr'track_vmax_cdf_{gcm}.png', dpi=300, bbox_inches="tight")
+    #plt.close()
 
 
 # Normalize the weights (sum should be 1)

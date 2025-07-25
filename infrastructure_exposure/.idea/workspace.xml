@@ -16,6 +16,7 @@
       <change afterPath="$PROJECT_DIR$/historical_storms/02_building_exposure_stats.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/historical_storms/03_pieChart_floodTotals.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/historical_storms/04_BuildExposure_HexbinPlot.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/historical_storms/05_BuildExposure_squareBin.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/Florence_FloodHazard_Exposure_pieChart.ipynb" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/Roadway Depths.ipynb" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/build_exposure_RP.py" afterDir="false" />
@@ -26,6 +27,12 @@
       <change afterPath="$PROJECT_DIR$/old/hexbin_forSarah.py" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/infrastructure_exposure_maps_AGU2024.ipynb" afterDir="false" />
       <change afterPath="$PROJECT_DIR$/old/road_inundation.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/01_extract_RPdepth_at_buildings.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/01_extract_TC_WSE_at_buildings.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/02_building_exposure_stats.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/03_pieChart_floodTotals.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/04_BuildExposure_HexbinPlot.py" afterDir="false" />
+      <change afterPath="$PROJECT_DIR$/synthetic_storms/05_BuildExposure_squareBin.py" afterDir="false" />
     </list>
     <option name="SHOW_DIALOG" value="false" />
     <option name="HIGHLIGHT_CONFLICTS" value="true" />
@@ -51,16 +58,18 @@
     <option name="hideEmptyMiddlePackages" value="true" />
     <option name="showLibraryContents" value="true" />
   </component>
-  <component name="PropertiesComponent">{
-  &quot;keyToString&quot;: {
-    &quot;RunOnceActivity.ShowReadmeOnStart&quot;: &quot;true&quot;,
-    &quot;RunOnceActivity.git.unshallow&quot;: &quot;true&quot;,
-    &quot;git-widget-placeholder&quot;: &quot;master&quot;,
-    &quot;last_opened_file_path&quot;: &quot;C:/Users/lelise/Documents/GitHub/flood_model_carolinas/infrastructure_exposure/old&quot;
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "RunOnceActivity.git.unshallow": "true",
+    "git-widget-placeholder": "master",
+    "last_opened_file_path": "C:/Users/lelise/Documents/GitHub/flood_model_carolinas/infrastructure_exposure/synthetic_storms"
   }
-}</component>
+}]]></component>
   <component name="RecentsManager">
     <key name="CopyFile.RECENT_KEYS">
+      <recent name="C:\Users\lelise\Documents\GitHub\flood_model_carolinas\infrastructure_exposure\synthetic_storms" />
+      <recent name="C:\Users\lelise\Documents\GitHub\flood_model_carolinas\infrastructure_exposure\historical_storms" />
       <recent name="C:\Users\lelise\Documents\GitHub\flood_model_carolinas\infrastructure_exposure\old" />
     </key>
     <key name="MoveFile.RECENT_KEYS">

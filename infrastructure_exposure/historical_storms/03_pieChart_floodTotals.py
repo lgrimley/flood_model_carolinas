@@ -37,20 +37,20 @@ def adjust_labels(texts, theta, r):
 Get total buildings flooded for historical storms 
 
 '''
-os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure')
+os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter4_Exposure\historical_storms')
 
 # Load the totals for the buildings
 buildings = pd.read_csv('building_counts_across_depthThresh_FlorFloyMatt.csv', index_col=0)
 dfb = buildings[buildings['hmin'] == 0.5].copy()
 dfb.drop(columns=['hmin', 'Period', 'Coastal-Comp','Runoff-Comp', 'Total'], inplace=True)
-dfb['Type'] = 'Flood Extent'
+dfb['Type'] = 'Buildings'
 
 # Load the overland flood extent
 fld_extent_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\03_downscaled\downscale_comparsion_depth_fldArea.csv'
 fld_extent = pd.read_csv(fld_extent_filepath)
 mapping = {'attr1': 'Coastal', 'attr2': 'Compound', 'attr3': 'Runoff'}
 fld_extent['attrCode'] = fld_extent['attrCode'].map(lambda x: mapping.get(x, 'Total'))
-df = fld_extent[['storm', 'climate', 'attrCode', 'Area_sqkm', 'gridRes']]
+df = fld_extent[['storm', 'climate', 'attrCode', 'Area_sqkm', 'gridRes']].copy()
 df['group'] = df['storm'].astype(str) + '_' + df['climate'].astype(str)
 df.set_index('group', inplace=True, drop=True)
 dfs = df[df['gridRes'] == 5].copy()
@@ -58,7 +58,7 @@ dfs.drop(columns=['storm', 'climate', 'gridRes'], inplace=True)
 df_reset = dfs.reset_index()  # bring 'group' back as a column to pivot
 df_pivoted = df_reset.pivot_table(index='group', columns='attrCode', values='Area_sqkm', aggfunc='first')
 df_pivoted.drop(columns=['Total'], inplace=True)
-df_pivoted['Type'] = 'Buildings'
+df_pivoted['Type'] = 'Flood Extent'
 
 # Combined the building and flood area data before plotting
 combined_df = pd.concat(objs=[dfb, df_pivoted],axis=0, ignore_index=False)

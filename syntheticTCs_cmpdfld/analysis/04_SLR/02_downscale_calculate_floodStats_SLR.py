@@ -188,6 +188,6 @@ for tc_id in tc_ids:
 
 end_time = time.time()
 elapsed_time = end_time - start_time
-print(f"Elapsed time for {zsmax_file}: {elapsed_time} seconds")
+print(f"Elapsed time for {output_filename}: {elapsed_time} seconds")
 
 

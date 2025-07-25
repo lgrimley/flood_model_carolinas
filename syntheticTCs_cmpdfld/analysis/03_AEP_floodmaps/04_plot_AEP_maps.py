@@ -7,8 +7,8 @@ import hydromt
 import os
 import numpy as np
 from matplotlib.colors import LogNorm
-import cartopy.crs as ccrs
 from matplotlib.colors import ListedColormap
+import cartopy.crs as ccrs
 from hydromt_sfincs import SfincsModel
 sys.path.append(r'/')
 mpl.use('TkAgg')
@@ -19,16 +19,16 @@ os.chdir(wdir)
 
 '''' Load in the data '''
 # Load the water level data for the historical return periods
-histdir = r'.\ncep\aep'
-file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
-scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+histdir = r'.\ncep\aep\probabilistic_WSE'
+file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('AEP' in file) & (file.endswith('.nc'))]
+scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('AEP' in file) & (file.endswith('.nc'))]
 da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
 h_aep = xr.concat(objs=da_list, dim='scenario')
 h_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
 # Load the water level data for the projected return periods
-projdir = r'.\canesm_ssp585\aep'
-file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+projdir = r'.\canesm_ssp585\aep\probabilistic_WSE'
+file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('AEP' in file) & (file.endswith('.nc'))]
 da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
 p_aep = xr.concat(objs=da_list, dim='scenario')
 p_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
@@ -78,7 +78,7 @@ mpl.rcParams.update({'axes.titlesize': 10})
 mpl.rcParams["figure.autolayout"] = True
 
 ''' Plot AEP difference between Historic and Projected '''
-sel_rp = [10, 25, 100, 250]
+sel_rp = [10,25,100, 250]
 d_plot = []
 df_combined = pd.DataFrame()
 df_combined_ids = []
@@ -100,12 +100,11 @@ for T in sel_rp:
 
     d_plot = d_plot + [h_depth, p_depth, diff]
 
-from matplotlib.colors import ListedColormap
 
 # Custom white-only colormap
 white_cmap = ListedColormap(['white'])
 outdir = r'.\05_ANALYSIS\aep'
-plot_AEP_depth_climate_comparsion = True
+plot_AEP_depth_climate_comparsion = False
 if plot_AEP_depth_climate_comparsion is True:
     # Plotting
     rp = (1/ np.array(sel_rp))*100
@@ -178,14 +177,43 @@ if plot_AEP_depth_climate_comparsion is True:
 
     plt.subplots_adjust(wspace=0.0, hspace=0)
     plt.margins(x=0, y=0)
-    plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\03_AEP_floodmaps_compound\aep_flood_depths_historic_projected_difference.jpg', bbox_inches='tight', dpi=300)
+    plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\03_AEP_floodmaps_compound\1pct_aep_flood_depths_historic_projected_difference.jpg', bbox_inches='tight', dpi=300)
     plt.close()
 
 
+plot_AEP_depth_1PCT = True
+if plot_AEP_depth_1PCT is True:
+    T=100
+    h = h_aep.sel(scenario='compound', return_period=T)
+    h_depth = (h - dem).compute()
+    h_depth = h_depth.where(h_depth > 0.05)
+
+    fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 6),
+                             subplot_kw={'projection': utm},tight_layout=True, layout='constrained')
+
+    ckwargs = dict(cmap='Blues', vmin=0.05, vmax=8)
+    cs = h_depth.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=1)
+    mod.region.plot(ax=ax, color='grey', edgecolor='none', zorder=0, alpha=0.8)
+    mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
+
+    ax.set_axis_off()
+    ax.set_title('')
+
+    label = 'Depth (m)'
+    pos0 = ax.get_position()  # get the original position
+    cax = fig.add_axes([pos0.x1 + 0.12, pos0.y0 + pos0.height * 0.01, 0.04, pos0.height * 1])
+    cbar2 = fig.colorbar(cs,
+                         cax=cax,
+                         orientation='vertical',
+                         label=label,
+                         ticks=[0.05, 2, 4, 6, 8],
+                         extend='max'
+                         )
 
 
-
-
-
-
+    plt.subplots_adjust(wspace=0.0, hspace=0)
+    plt.margins(x=0, y=0)
+    plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\03_AEP_floodmaps_compound\1pct_aep_historic.jpg',
+                bbox_inches='tight', dpi=300)
+    plt.close()
 
