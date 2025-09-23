@@ -13,23 +13,26 @@ import hydromt
 import pandas as pd
 from hydromt_sfincs import SfincsModel
 
-os.chdir(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS')
+wdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_MODEL_OUTPUTS'
+os.chdir(wdir)
+
+'''' Load in the data '''
 # Load the water level data for the historical return periods
-histdir = fr'.\ncep\aep'
-file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
-scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+histdir = r'.\ncep\aep\probabilistic_WSE'
+file_paths = [os.path.join(histdir, file) for file in os.listdir(histdir) if ('AEP' in file) & (file.endswith('.nc'))]
+scenarios = [file.split('_')[-1].split('.')[0] for file in os.listdir(histdir) if ('AEP' in file) & (file.endswith('.nc'))]
 da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
 hist_aep = xr.concat(objs=da_list, dim='scenario')
 hist_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
 # Load the water level data for the projected return periods
-projdir = fr'.\canesm_ssp585\aep'
-file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('returnPeriods' in file) & (file.endswith('.nc'))]
+projdir = r'.\canesm_ssp585\aep\probabilistic_WSE'
+file_paths = [os.path.join(projdir, file) for file in os.listdir(projdir) if ('AEP' in file) & (file.endswith('.nc'))]
 da_list = [xr.open_dataarray(file, engine='netcdf4') for file in file_paths]
 fut_aep = xr.concat(objs=da_list, dim='scenario')
 fut_aep['scenario'] = xr.IndexVariable(dims='scenario', data=scenarios)
 
-rp = 100
+rp = 250
 res = 200
 
 ##################################################################################################################
@@ -142,7 +145,7 @@ color_list2 = np.array([
 cmap, norm = mpl.colors.from_levels_and_colors(levels, color_list2)
 ##################################################################################################################
 periods = ['Historic (1980-2005)', 'Future (2070-2100)']
-scenarios = ['Compound\nminus\nRunoff', 'Compound\nminus\nCoastal', 'Compound\nminus\nMax Individual']
+scenarios = [f'0.4% Total\nminus\n Runoff-only', '0.4% Total\nminus\n Coastal-only', '0.4% Total\nminus\nMax Individual']
 
 fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 6), subplot_kw={'projection': utm})
 for i in range(len(scenarios)):
@@ -159,9 +162,9 @@ for i in range(len(axes)):
     # mask = wb_mask.where(wb_mask == 1)
     # mask.plot(ax=ax, add_colorbar=False, zorder=2, **ckwargs)
     mod.region.plot(ax=ax, color='white', edgecolor='none', zorder=0, alpha=0)
-    major_rivers_clip.plot(ax=ax, color='slategrey', edgecolor='slategrey', linewidth=0.5, zorder=2, alpha=1)
-    nc_major_rivers_clip.plot(ax=ax, color='slategrey', edgecolor='slategrey', linewidth=0.5, zorder=2, alpha=1)
-    coastal_wb_clip.plot(ax=ax, color='slategrey', edgecolor='slategrey', linewidth=0.5, zorder=2, alpha=1)
+    major_rivers_clip.plot(ax=ax, color='grey', edgecolor='grey', linewidth=0.5, zorder=2, alpha=0.5)
+    nc_major_rivers_clip.plot(ax=ax, color='grey', edgecolor='grey', linewidth=0.5, zorder=2, alpha=0.5)
+    coastal_wb_clip.plot(ax=ax, color='lightgrey', edgecolor='grey', linewidth=0.5, zorder=2, alpha=0.5)
     mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=3, alpha=1)
     ax.set_axis_off()
     ax.set_title('')
@@ -173,7 +176,7 @@ for i in range(len(axes)):
                                    verticalalignment='center',
                                    rotation='horizontal',
                                    transform=axes[first_in_row[i]].transAxes)
-label = '1% AEP Water Level Difference (m)'
+label = 'Water Level Difference (m)'
 ax = axes[3]
 pos0 = ax.get_position()  # get the original position
 cax = fig.add_axes([pos0.x1 + 0.12, pos0.y0 -0.1, 0.03, pos0.height * 1.75])
@@ -185,5 +188,5 @@ cbar = fig.colorbar(cs,
 plt.subplots_adjust(wspace=0, hspace=0)
 plt.margins(x=0, y=0)
 plt.tight_layout()
-plt.savefig(r'..\\05_ANALYSIS\03_AEP_floodmaps\1pctAEP_floodmap_comparison2.jpg', bbox_inches='tight', dpi=300)
+plt.savefig(rf'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\03_AEP_floodmaps_compound\{rp}RP_floodmap_comparison.jpg', bbox_inches='tight', dpi=300)
 plt.close()

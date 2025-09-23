@@ -146,14 +146,14 @@ basin_mask = cat.get_rasterdataset(basin_mask, crs=32617, chunks=chunks_size, ge
 wb_mask.rio.write_crs(32617, inplace=True)
 basin_mask.rio.write_crs(32617, inplace=True)
 
-for clim in ['ncep', 'canesm_ssp585']:
-    for process in ['runoff', 'coastal']:
+for clim in ['ncep']:#, 'canesm_ssp585']:
+    for process in ['compound']:
         start_time = time.time()
-        csv_path = fr'./{clim}/aep/{clim}_AEP_floodStats_{process}_sbgRes{res}m_hmin{hmin}m.csv'
+        csv_path = fr'./{clim}/aep/probabilistic_WSE/floodmaps_{res}m/{clim}_AEP_floodStats_{process}_sbgRes{res}m_hmin{hmin}m_v2.csv'
 
         if clim == 'ncep':
-            attr_filepath = r'./ncep/aep/ncep_RP_attribution.nc'
-            zsmax_filepath = fr'./ncep/aep/ncep_MaxWL_returnPeriods_{process}.nc'
+            attr_filepath = r'./ncep/aep/probabilistic_WSE/attribution/ncep_AEP_WSE_attribution.nc'
+            zsmax_filepath = fr'./ncep/aep/probabilistic_WSE/ncep_AEP_WSE_{process}.nc'
         else:
             attr_filepath = r'./canesm_ssp585/aep/gcm_RP_attribution.nc'
             zsmax_filepath = rf'./canesm_ssp585/aep/projected_MaxWL_returnPeriods_{process}.nc'
@@ -222,8 +222,8 @@ for clim in ['ncep', 'canesm_ssp585']:
                 attr_masked.rio.write_crs(32617, inplace=True)
 
             # print('Writing downscaled flood depths to raster...')
-            if rp == 100:
-                hmax_masked.raster.to_raster(fr'./{clim}/aep/{clim}_RP{rp}_{process}_hmax_sbgRes{res}m.tif', nodata=np.nan)
+            #if rp == 100:
+            #    hmax_masked.raster.to_raster(fr'./{clim}/aep/{clim}_RP{rp}_{process}_hmax_sbgRes{res}m.tif', nodata=np.nan)
 
             mdf1 = get_depth_extent_stats(hmax_da=hmax_masked, attr_da=attr_masked, run_id=f'RP{rp}_Domain', res=res)
             mdf_stats = pd.concat(objs=[mdf_stats, mdf1], axis=0, ignore_index=False)

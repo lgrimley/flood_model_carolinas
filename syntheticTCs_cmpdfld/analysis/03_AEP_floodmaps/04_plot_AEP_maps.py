@@ -104,7 +104,7 @@ for T in sel_rp:
 # Custom white-only colormap
 white_cmap = ListedColormap(['white'])
 outdir = r'.\05_ANALYSIS\aep'
-plot_AEP_depth_climate_comparsion = False
+plot_AEP_depth_climate_comparsion = True
 if plot_AEP_depth_climate_comparsion is True:
     # Plotting
     rp = (1/ np.array(sel_rp))*100
@@ -116,7 +116,7 @@ if plot_AEP_depth_climate_comparsion is True:
     last_in_row = np.arange(ncol - 1, n_subplots, ncol)
     first_row = np.arange(0, ncol)
     last_row = np.arange(first_in_row[-1], n_subplots, 1)
-    fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6, 6),
+    fig, axes = plt.subplots(nrows=nrow, ncols=ncol, figsize=(6.5, 6),
                              subplot_kw={'projection': utm},tight_layout=True, layout='constrained')
     axes = axes.flatten()
     for i in range(len(axes)):
@@ -136,7 +136,7 @@ if plot_AEP_depth_climate_comparsion is True:
         else:
             ckwargs = dict(cmap='Blues', vmin=0.05, vmax=6)
             cs = data.plot(ax=ax, add_colorbar=False, **ckwargs, zorder=1)
-            mod.region.plot(ax=ax, color='grey', edgecolor='none', zorder=0, alpha=0.8)
+            mod.region.plot(ax=ax, color='grey', edgecolor='none', zorder=0, alpha=0.6)
             mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=2, alpha=1)
         ax.set_axis_off()
         ax.set_title('')

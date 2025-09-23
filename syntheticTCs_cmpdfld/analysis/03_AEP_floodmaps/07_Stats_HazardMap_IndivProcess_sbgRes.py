@@ -21,27 +21,60 @@ mod = SfincsModel(root=r'..\03_MODEL_RUNS\sfincs_base_mod', mode='r', data_libs=
 
 ##################################################################################################################
 res = 5
-dir = fr'.\ncep\aep\floodmaps_{res}m'
+dir = fr'.\canesm_ssp585\aep\probabilistic_WSE\floodmaps_{res}m'
 chunks_size = {'x': 5000, 'y': 5000}
 
-compound = cat.get_rasterdataset(os.path.join(dir, f'ncep_RP100_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
-runoff = cat.get_rasterdataset(os.path.join(dir, f'ncep_RP100_runoff_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
-coastal = cat.get_rasterdataset(os.path.join(dir, f'ncep_RP100_coastal_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
-da = xr.concat([runoff, coastal, compound], dim=xr.IndexVariable("scenario", ["runoff", "coastal", "compound"]))
+total = cat.get_rasterdataset(os.path.join(dir, f'canesm_ssp585_RP100_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
+runoff = cat.get_rasterdataset(os.path.join(dir, f'canesm_ssp585_RP100_runoff_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
+coastal = cat.get_rasterdataset(os.path.join(dir, f'canesm_ssp585_RP100_coastal_hmax_sbgRes{res}m.tif'), chunks=chunks_size)
 
+# Combine the three scenarios
+da = xr.concat([runoff, coastal, total], dim=xr.IndexVariable("scenario", ["runoff", "coastal", "compound"]))
+
+# Get the max of the individual processes - runoff and coastal
 da_single_max = da.sel(scenario=['runoff', 'coastal']).max('scenario')
-
-#diff  = compound.fillna(0) - da_single_max.fillna(0)
-#diff = compound.fillna(0) - runoff.fillna(0)
-diff = compound.fillna(0) - coastal.fillna(0)
-
-depths = diff.values
+depths = da_single_max.values
 depths = depths[~np.isnan(depths)]
 depths = pd.DataFrame(depths[depths != 0])
 df = depths.describe(percentiles=[0.5, 0.9, 0.95])
 mdf = df.T
 mdf['Area_sqkm'] = (mdf['count'] * res * res) / (1000 ** 2)
-mdf2 = mdf.round(3)
+mdf_da_single_max = mdf.round(3)
+
+
+# Subtract the 1% AEP from each other
+# Max individual
+tot_minus_max  = total.fillna(0) - da_single_max.fillna(0)
+depths = tot_minus_max.values
+depths = depths[~np.isnan(depths)]
+depths = pd.DataFrame(depths[depths != 0])
+df = depths.describe(percentiles=[0.5, 0.9, 0.95])
+mdf = df.T
+mdf['Area_sqkm'] = (mdf['count'] * res * res) / (1000 ** 2)
+mdf_tot_minus_max = mdf.round(3)
+
+# Subtract the 1% AEP from each other
+# Runoff
+tot_minus_run = total.fillna(0) - runoff.fillna(0)
+depths = tot_minus_run.values
+depths = depths[~np.isnan(depths)]
+depths = pd.DataFrame(depths[depths != 0])
+df = depths.describe(percentiles=[0.5, 0.9, 0.95])
+mdf = df.T
+mdf['Area_sqkm'] = (mdf['count'] * res * res) / (1000 ** 2)
+mdf_tot_minus_run = mdf.round(3)
+
+# Subtract the 1% AEP from each other
+# Coastal
+tot_minus_coast = total.fillna(0) - coastal.fillna(0)
+depths = tot_minus_coast.values
+depths = depths[~np.isnan(depths)]
+depths = pd.DataFrame(depths[depths != 0])
+df = depths.describe(percentiles=[0.5, 0.9, 0.95])
+mdf = df.T
+mdf['Area_sqkm'] = (mdf['count'] * res * res) / (1000 ** 2)
+mdf_tot_minus_coast = mdf.round(3)
+
 
 # Load the water body mask dataarray
 # water_mask = rf'./masks/water_mask_sbgRes{res}m.tif'

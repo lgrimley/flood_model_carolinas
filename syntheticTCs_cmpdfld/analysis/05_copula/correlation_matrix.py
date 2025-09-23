@@ -12,7 +12,7 @@ plt.ion()
 
 ###################################################################################################################
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\05_ANALYSIS\01_return_period_tables')
-outdir = r'..\07_correlation_matrix'
+outdir = r'..\06_copula\correlation_matrices'
 
 # sel_cols = ['maxWS', 'meanMaxWS', 'meanWSthresh', 'CumPrecipKM3', 'MeanTotPrecipMM', 'MaxTotPrecipMM', 'maxRR',
 #        'AvgmaxRR', 'meanRRthresh', 'stormtide', 'Coastal_Area_sqkm', 'Compound_Area_sqkm',
@@ -35,7 +35,7 @@ track_table_filepath = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINC
 track_df = pd.read_csv(track_table_filepath, index_col=0)
 track_df.set_index('tc_id', inplace=True, drop=True)
 track_df_hist = track_df[['rmw100','pstore100','speed100','vstore100']]
-histdf = histdf.merge(track_df_hist, left_index=True, right_index=True, how='left')
+#histdf = histdf.merge(track_df_hist, left_index=True, right_index=True, how='left')
 
 ###################################################################################################################
 # Load the projected/future TC data
@@ -50,9 +50,12 @@ track_df.set_index('tc_id', inplace=True, drop=True)
 track_df_fut = track_df[['rmw100','pstore100','speed100','vstore100']]
 
 ###################################################################################################################
-df = futdf
-clim = 'CANESM'
-track_df = track_df_fut
+
+##### CHANGE ME HERE ##########
+df = histdf
+clim = 'NCEP'
+track_df = track_df_hist
+#############################
 
 sections = {
     'Track': ['rmw100','pstore100','speed100','vstore100'],
@@ -79,7 +82,7 @@ display_names = {
 }
 group_sizes = [len(v) for v in sections.values()]
 ordered_cols = [col for group in sections.values() for col in group]
-pval_lim = 0.01
+pval_lim = 0.05
 
 rho_matrix_list = []
 pval_matrix_list = []
@@ -115,16 +118,30 @@ for basin_name, group in df.groupby('basin'):
 
     # Plotting below
     sig_rho = rho_matrix.mask(pval_matrix >= pval_lim)
+    mask = np.triu(np.ones_like(sig_rho, dtype=bool), k=1)
     xticklabels = [display_names.get(col, col) for col in ordered_cols]
     yticklabels = [display_names.get(col, col) for col in ordered_cols]
 
-    plt.figure(figsize=(6, 5))
-    ax = sns.heatmap(sig_rho, cmap='coolwarm', annot=True, fmt=".2f", center=0, annot_kws={'size': 7},
-                     linewidths=1, linecolor='white', cbar=True, square=False,
+    fig, ax = plt.subplots(figsize=(6, 5))
+    sns.heatmap(sig_rho, mask=mask,cmap='coolwarm', annot=True, fmt=".2f", center=0, ax=ax,
+                     annot_kws={'size': 7},
+                     linewidths=1, linecolor='white', cbar=False, square=False,
                      vmin=-1, vmax=1,
                      xticklabels=xticklabels, yticklabels=yticklabels,
-                     cbar_kws={'shrink': 0.8}
+                     #cbar_kws={'shrink': 0.8, 'location':'bottom'}
                      )
+    from mpl_toolkits.axes_grid1 import make_axes_locatable
+    divider = make_axes_locatable(ax)
+    # Adjust size and position (left, bottom, width, height)
+    cax = divider.append_axes("top", size="4%", pad=0.5)  # 5% height, 0.7 pad above heatmap
+
+    # Create colorbar
+    norm = plt.Normalize(vmin=-1, vmax=1)
+    sm = plt.cm.ScalarMappable(cmap="coolwarm", norm=norm)
+    sm.set_array([])  # needed for ScalarMappable
+
+    cb = fig.colorbar(sm, cax=cax, orientation="horizontal")
+    cb.set_label(f'Correlation Coefficient (p < {pval_lim})')
 
     # Rotate tick labels
     ax.set_xticklabels(ax.get_xticklabels(), rotation=90, size=8)
@@ -137,32 +154,33 @@ for basin_name, group in df.groupby('basin'):
         mid = start + group_len / 2 - 0.5
         n = len(ordered_cols)
         # Add labels outside the heatmap
-        ax.text(-3.75, mid, label, va='center', ha='center', fontsize=10, fontweight='bold', rotation=90)
-        ax.text(mid, n + 5, label, va='bottom', ha='center', fontsize=10, fontweight='bold', rotation=0)
+        ax.text(-3, mid, label, va='center', ha='center', fontsize=8, fontweight='bold', rotation=90)
+        ax.text(mid, n + 5, label, va='bottom', ha='center', fontsize=8, fontweight='bold', rotation=0)
 
-    # Section start positions
-    section_starts = np.cumsum([0] + group_sizes[:-1])
-
-    # Draw box around each section block (diagonal squares)
-    for start, size in zip(section_positions, group_sizes):
-        rect = patches.Rectangle(
-            (start, start),
-            width=size,
-            height=size,
-            fill=False,
-            edgecolor='black',
-            linewidth=2
-        )
-        ax.add_patch(rect)
+    # # Section start positions
+    # section_starts = np.cumsum([0] + group_sizes[:-1])
+    #
+    # # Draw box around each section block (diagonal squares)
+    # for start, size in zip(section_positions, group_sizes):
+    #     rect = patches.Rectangle(
+    #         (start, start),
+    #         width=size,
+    #         height=size,
+    #         fill=False,
+    #         edgecolor='black',
+    #         linewidth=2
+    #     )
+    #     ax.add_patch(rect)
 
     # Titles and output
-    title = f"{basin_name} ({clim}): Spearman Correlation (p < {pval_lim})"
-    plt.title(title, fontsize=10)
+    #title = f"{basin_name} ({clim}): Spearman Correlation (p < {pval_lim})"
+    #plt.title(title, fontsize=10)
     plt.subplots_adjust(wspace=0.0, hspace=0)
     plt.margins(x=0, y=0)
     plt.tight_layout(rect=[0, 0, 1, 0.95])  # leave space for title
-    plt.savefig(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}_pvalue{pval_lim}_labeled.png'), dpi=300, bbox_inches='tight')
+    plt.savefig(os.path.join(outdir, f'spearman_correlation_{basin_name}_{clim}_pvalue{pval_lim}_mask.png'), dpi=300, bbox_inches='tight')
     plt.close()
+
 
 vars = ['Compound_Area_sqkm', 'Runoff_Area_sqkm','Coastal_Area_sqkm','Total_Area_sqkm']
 for v in vars:

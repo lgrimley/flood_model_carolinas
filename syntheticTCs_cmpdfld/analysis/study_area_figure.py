@@ -74,10 +74,21 @@ basins['nickname'] = ['Pamlico', 'Neuse', 'Onslow Bay', 'Cape Fear', 'Lower Pee 
 
 states = cat.get_geodataframe(
     r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\us_boundary\cb_2018_us_state_500k\cb_2018_us_state_500k.shp')
-#states_sub = states[states['STUSPS'].isin(['VA', 'NC', 'TN', 'WV', 'GA', 'KY', 'DC', 'SC', 'AL','FL','MD',])]
-states.to_crs(epsg=32617, inplace=True)
-states.set_index('STUSPS', inplace=True)
+states_sub = states[states['STUSPS'].isin(['NC', 'SC'])]
+states_sub.to_crs(epsg=32617, inplace=True)
+states_sub.set_index('STUSPS', inplace=True)
 
+census_areas = mod.data_catalog.get_geodataframe(r'Z:\Data-Expansion\users\lelise\data\geospatial\boundary\2024_Census_Urban_Areas\tl_2024_us_uac20\tl_2024_us_uac20.shp')
+census_areas = census_areas.to_crs(mod.crs)
+census_areas = census_areas.clip(mod.region)
+
+l_gdf = cat.get_geodataframe(r'Z:\Data-Expansion\users\lelise\data\geospatial\infrastructure\enc_major_cities.shp')
+l_gdf = l_gdf[l_gdf['Name'].isin(
+     ['New Bern', 'Wilmington', 'Jacksonville', 'Myrtle Beach', 'Morehead City'])]
+l_gdf['label'] = ['A', 'B', 'C' ,'D', 'E']
+l_gdf.set_index('label', inplace=True)
+l_gdf.to_crs(epsg=32617, inplace=True)
+cities = l_gdf.clip(mod.region)
 ##################################################################################################################
 import matplotlib.patches as mpatches
 from matplotlib import patheffects
@@ -88,7 +99,7 @@ num_values = len(unique_values)
 colors = ['mediumpurple', 'lightblue','darkorange','darkseagreen','lightcoral']
 color_map = dict(zip(unique_values, colors))
 
-fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6, 4), subplot_kw={'projection': utm}, tight_layout=True)
+fig, ax = plt.subplots(nrows=1, ncols=1, figsize=(6.5, 4), subplot_kw={'projection': utm}, tight_layout=True)
 # Plot each basin
 legend_patches = []
 for index, row in basins.iterrows():
@@ -103,7 +114,7 @@ for index, row in basins.iterrows():
         edgecolor='black',
         linewidth=0.5,
         label=value,
-        alpha=0.9
+        alpha=0.5
     )
     ax.add_patch(patch)
 
@@ -111,28 +122,33 @@ for value in unique_values:
     legend_patches.append(mpatches.Patch(color=color_map[value], label=value))
 
 # Add other layers and features
-states.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1)
-coastal_wb_clip.plot(ax=ax, color='steelblue', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=0.5)
-major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=1)
-nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='steelblue', linewidth=0.35, zorder=2, alpha=1)
+census_areas.plot(ax=ax, color='grey', edgecolor='black', linewidth=0.08, zorder=1, alpha=0.7)
+states_sub.plot(ax=ax, color='none', edgecolor='black', linewidth=0.5, zorder=1)
+major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkblue', linewidth=0.25, zorder=2, alpha=0.7)
+nc_major_rivers_clip.plot(ax=ax, color='none', edgecolor='darkblue', linewidth=0.25, zorder=2, alpha=0.7)
+coastal_wb_clip.plot(ax=ax, color='steelblue', edgecolor='darkblue', linewidth=0.25, zorder=2, alpha=0.7)
 basins.plot(ax=ax, color='none', edgecolor='black', linewidth=0.35, zorder=2)
-mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=2, zorder=2)
+mod.region.plot(ax=ax, color='none', edgecolor='black', linewidth=1, zorder=2)
 legend_patches.append(mpatches.Patch(facecolor='none', edgecolor='black',linewidth=2, label='Model Domain'))
-adcirc_locs.plot(ax=ax, color='lightgrey', edgecolor='black', zorder=2, markersize=18, label='ADCIRC Gages')
+legend_patches.append(mpatches.Patch(color='grey', label='Urban Areas'))
+cities.plot(ax=ax, marker='o', markersize=25, color="black",
+            edgecolor='white', linewidth=0.75, label='Cities', zorder=4)
+#adcirc_locs.plot(ax=ax, color='red', edgecolor='none', zorder=2, markersize=12, label='Storm tide Locs', alpha=1)
 adcirc_patch = Line2D(
     [0], [0], marker='o', color='black',
-    label='ADCIRC Gages',
-    markerfacecolor='lightgrey', markeredgecolor='black',
-    markersize=8, linestyle='None'
+    label='Cities',
+    markerfacecolor='black', #markeredgecolor='white',
+    markersize=6, linestyle='None'
 )
 legend_patches.append(adcirc_patch)
 
+
 # Update extent of figure
-minx, miny, maxx, maxy = [300944, 3550131, 1101544, 4100000]
+minx, miny, maxx, maxy = [185000, 3540000, 1150000, 4070000] #states_sub.buffer(10**4.5).total_bounds
 ax.set_xlim(minx, maxx)
 ax.set_ylim(miny, maxy)
 
-for label, grow in states.iterrows():
+for label, grow in states_sub.iterrows():
     if label in ['SC', 'NC',]:
         if label == 'NC':
             ll = -40
@@ -145,6 +161,19 @@ for label, grow in states.iterrows():
         x, y = grow.geometry.centroid.x, grow.geometry.centroid.y
         ax.annotate(f'{label}', xy=(x, y), weight='bold', **ann_kwargs)
 
+# Label Cities
+for label, grow in cities.iterrows():
+    x, y = grow.geometry.x, grow.geometry.y
+    ann_kwargs = dict(
+        xytext=(-10, 2),
+        #xytext=(-50, 5),
+        textcoords="offset points",
+        zorder=4,
+        path_effects=[
+            patheffects.Stroke(linewidth=2, foreground="white", alpha=1),
+            patheffects.Normal(), ], )
+    ax.annotate(f'{label}', xy=(x, y), **ann_kwargs)
+
 # Add title and save figure
 ax.set_title('')
 ax.set_ylabel(f"Y Coord UTM zone {utm_zone} (meters)")
@@ -154,18 +183,7 @@ ax.xaxis.set_visible(True)
 ax.ticklabel_format(style='sci', useOffset=False)
 ax.set_aspect('equal')
 
-# Add layer legend
-# legend_kwargs0 = dict(
-#     bbox_to_anchor=(1, 1),
-#     title=None,
-#     loc="upper left",
-#     frameon=True,
-#     prop=dict(size=10),
-#     fontsize='small'
-# )
-# ax.legend(handles=legend_patches,**legend_kwargs0)
 ax.legend(handles=legend_patches, loc='lower right', title=None, fontsize='medium')
-
 
 plt.subplots_adjust(wspace=0, hspace=0)
 plt.margins(x=0, y=0)
