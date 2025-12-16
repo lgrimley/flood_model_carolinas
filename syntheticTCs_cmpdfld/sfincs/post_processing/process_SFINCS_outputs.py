@@ -45,7 +45,7 @@ correct = pd.read_csv(fr'.\02_DATA\{foldname}\stormTide\gage_peaks_ZerosRemoved_
 selected = tc_ids_vmax[tc_ids_vmax['tc_id'].isin(correct.index)]
 tc_ids_vmax_ordered = selected.sort_values(by='vstore100', ascending=True)
 
-# Split them into groups for writting to netcdfs
+# Split them into groups for writing to netcdfs
 groups = [tc_ids_vmax_ordered[i:i + group_size] for i in range(0, len(tc_ids_vmax_ordered), group_size)]
 
 outputdir = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\04_RESULTS'

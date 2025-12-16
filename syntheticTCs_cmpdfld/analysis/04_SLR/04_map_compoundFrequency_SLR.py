@@ -9,6 +9,8 @@ import shapely
 sys.path.append(r'/')
 mpl.use('TkAgg')
 plt.ion()
+os.environ['GDAL_MEM_ENABLE_OPEN'] = 'YES'
+
 
 os.chdir(r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs')
 
@@ -17,6 +19,7 @@ yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml
 base_root = r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter3_SyntheticTCs\03_MODEL_RUNS\sfincs_initcond_mod'
 mod = SfincsModel(root=base_root, mode='r', data_libs=yml_base)
 cat = mod.data_catalog
+
 # Plotting details
 wkt = mod.grid['dep'].raster.crs.to_wkt()
 utm_zone = mod.grid['dep'].raster.crs.to_wkt().split("UTM zone ")[1][:3]
@@ -148,7 +151,7 @@ import matplotlib.colors as mcolors
 from matplotlib import patheffects
 
 perc = diff2/max_num
-colors = ['darkgoldenrod', 'lightgrey', 'darkgreen']
+colors = ['darkgoldenrod', 'pink', 'darkgreen']
 cmap = mcolors.LinearSegmentedColormap.from_list("gold_white_green", colors)
 # Define bounds and normalization
 bounds = [-0.5, -0.1, -0.01, 0.01, 0.1, 0.5]
@@ -206,11 +209,10 @@ if plot_full_domain is True:
 
     plt.subplots_adjust(wspace=0.0, hspace=0)
     plt.margins(x=0, y=0)
-    plt.savefig(rf'.\05_ANALYSIS\05_SLR\coastal_compound_freq_SLR_map.jpg',
-                 bbox_inches='tight', dpi=300)
+    plt.savefig(rf'.\05_ANALYSIS\05_SLR\coastal_compound_freq_SLR_map_v2.jpg',bbox_inches='tight', dpi=300)
     plt.close()
 
-plot_zooms = False
+plot_zooms = True
 if plot_zooms is True:
     s1y = 3670000
     s1x = 645000
@@ -260,7 +262,7 @@ if plot_zooms is True:
 
         # Add overlays
         mod.region.plot(ax=ax, color='white', edgecolor='none', linewidth=0, zorder=0, alpha=1)
-        census_areas.plot(ax=ax, color='thistle', edgecolor='black', linewidth=0.05, zorder=0.4, alpha=1)
+        #census_areas.plot(ax=ax, color='thistle', edgecolor='black', linewidth=0.05, zorder=0.4, alpha=1)
         major_rivers_clip.plot(ax=ax, color='lightblue', edgecolor='black', linewidth=0.05, zorder=0, alpha=0.7)
         nc_major_rivers_clip.plot(ax=ax, color='lightblue', edgecolor='black', linewidth=0.05, zorder=0, alpha=0.7)
         coastal_wb_clip.plot(ax=ax, color='lightblue', edgecolor='black', linewidth=0.05, zorder=0, alpha=0.7)
