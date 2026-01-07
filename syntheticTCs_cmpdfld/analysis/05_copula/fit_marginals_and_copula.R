@@ -182,13 +182,11 @@ fit_marginals_and_copula <- function(x, y, familyset = c(0,1,2,3,4,5,6), indepte
   # Return structure (extend, don’t break)
   # -----------------------------------------
   list(
-    marginals = list(
-      x = marg_x,
-      y = marg_y
-    ),
-    copula = best_cop,      # original behavior
-    copula_all = copula_df  # NEW: table of all copulas
+    marginals = list(x = marg_x, y = marg_y),
+    copula = best_cop,
+    copula_all = copula_df
   )
+
 }
 
 
