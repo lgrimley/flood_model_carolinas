@@ -29,8 +29,88 @@ safe_quantile <- function(qfun, p, params,
 }
 
 
+make_tail_grid <- function(n_base = 300,
+                           n_tail = 700,
+                           tail_start = 0.9,
+                           eps = 1e-6) {
+
+  u_base <- seq(eps, tail_start, length.out = n_base)
+  u_tail <- seq(tail_start, 1 - eps, length.out = n_tail)
+
+  unique(c(u_base, u_tail))
+}
+
+solve_isoline_uv <- function(cop, target_prob,
+                             u_grid,
+                             eps = 1e-6,
+                             tol = 1e-8) {
+
+  # -------------------------------------------------
+  # Independence copula: analytical AND isoline
+  # -------------------------------------------------
+  if (cop$family == 0) {
+
+    u_valid <- u_grid[u_grid < 1 - target_prob - eps]
+    v_vals  <- 1 - target_prob / (1 - u_valid)
+
+    keep <- is.finite(v_vals) & v_vals > eps & v_vals < 1 - eps
+
+    return(
+      data.frame(
+        U = u_valid[keep],
+        V = v_vals[keep]
+      )
+    )
+  }
+
+  # -------------------------------------------------
+  # General case: numerical root finding
+  # -------------------------------------------------
+  v_out <- rep(NA_real_, length(u_grid))
+
+  for (i in seq_along(u_grid)) {
+
+    u <- u_grid[i]
+
+    f <- function(v) {
+
+      u0 <- pmin(pmax(u, 1e-10), 1 - 1e-10)
+      v0 <- pmin(pmax(v, 1e-10), 1 - 1e-10)
+
+      1 - u0 - v0 +
+        VineCopula::BiCopCDF(u0, v0,
+                             family = cop$family,
+                             par = cop$par,
+                             par2 = cop$par2) -
+        target_prob
+    }
+
+
+    f_lo <- f(eps)
+    f_hi <- f(1 - eps)
+
+    if (is.finite(f_lo) && is.finite(f_hi) && f_lo * f_hi < 0) {
+      v_out[i] <- tryCatch(
+        uniroot(f, lower = eps, upper = 1 - eps, tol = tol)$root,
+        error = function(e) NA_real_
+      )
+    }
+  }
+
+  data.frame(U = u_grid, V = v_out) |>
+    na.omit()
+}
+
+
+
+
 # Function to compute a joint return-period contour from a fitted copula
-joint_return_period_contour <- function(fitted, target_rp = 100, lambda = 1) {
+joint_return_period_contour <- function(fitted,
+                                        target_rp = 100,
+                                        lambda = 1,
+                                        n_base = 300,
+                                        n_tail = 700,
+                                        tail_start = 0.9) {
   # Inputs:
   #   fitted    : result from fit_marginals_and_copula(x, y)
   #   target_rp : desired return period in years (e.g., 100)
@@ -50,92 +130,90 @@ joint_return_period_contour <- function(fitted, target_rp = 100, lambda = 1) {
   # -----------------------------------------
   target_prob <- 1 + log(1 - 1 / target_rp) / lambda
 
+  if (target_prob <= 0 || target_prob >= 1) {
+    stop("Invalid target joint probability.")
+  }
+
   # -----------------------------------------
-  # Match the copula family to the corresponding function
-  # (same as in your original script)
+  # Tail-adaptive copula-space isoline
   # -----------------------------------------
-  copula_fun <- switch(
-    cop$familyname,
-    "Survival Joe"     = JOcopB5,
-    "Joe"              = JOcopB5,
-    "Clayton"          = CLcop,
-    "Survival Clayton" = CLcop,
-    "Frank"            = FRcop,
-    "Gaussian"         = gEVcop,
-    "Gumbel"           = FGMcop,
-    "Survival Gumbel"  = GHcop,
-    "t"                = tEVcop,
-    "Independence"     = P,
-    stop("Unsupported copula family: ", cop$familyname)
+  u_grid <- make_tail_grid(
+    n_base = n_base,
+    n_tail = n_tail,
+    tail_start = tail_start
   )
 
-  # Handle para format based on family
-  para_vec <- switch(
-    cop$familyname,
-    "Gaussian" = cop$par,
-    "Frank"    = cop$par,
-    "Clayton"  = cop$par,
-    "Joe"      = cop$par,
-    "Gumbel"   = cop$par,
-    'Survival Joe'    = cop$par,
-    'Survival Gumbel' = cop$par,
-    "t"        = c(cop$par, cop$par2),
-    "Independence" = NULL
+  # Restrict u-grid to upper tail for AND exceedance
+  if (target_prob < 0.05) {
+    u_grid <- u_grid[u_grid > 1 - 5 * target_prob]
+  }
+
+  contour_uv <- solve_isoline_uv(
+    cop = cop,
+    target_prob = target_prob,
+    u_grid = u_grid
   )
 
+  if (nrow(contour_uv) < 10) {
+    # Retry with ultra-fine tail grid
+    u_grid <- seq(1 - 10 * target_prob, 1 - 1e-6, length.out = 2000)
+    contour_uv <- solve_isoline_uv(cop, target_prob, u_grid)
+    }
+
+
   # -----------------------------------------
-  # Generate the curve in copula space using joint.curvesCOP
-  # over a fine grid (guarantees many points)
+  # Back-transform to physical space
   # -----------------------------------------
-  cdf_list <- joint.curvesCOP(
-    cop = copula_fun,
-    para = para_vec,
-    type = "or",
-    probs = target_prob,
-    over.grid = TRUE,
-    delta = 0.0001
+  x_vals <- safe_quantile(
+    marg_x$quantile,
+    contour_uv$U,
+    as.list(marg_x$fit$estimate)
   )
 
-  contour_uv <- cdf_list[[as.character(target_prob)]]
+  y_vals <- safe_quantile(
+    marg_y$quantile,
+    contour_uv$V,
+    as.list(marg_y$fit$estimate)
+  )
 
-  # Clip U,V to avoid p=0 or 1
-  contour_uv$U <- pmin(pmax(contour_uv$U, 1e-6), 1 - 1e-6)
-  contour_uv$V <- pmin(pmax(contour_uv$V, 1e-6), 1 - 1e-6)
-
-  # Transform back to original data
-  # Note: For GEVs bounds depend on fitted parameters and if the quantile
-  # is above this bound it will be undefined (NA)
-  x_vals <- safe_quantile(marg_x$quantile, contour_uv$U, as.list(marg_x$fit$estimate))
-  y_vals <- safe_quantile(marg_y$quantile, contour_uv$V, as.list(marg_y$fit$estimate))
-
-  # Drop invalid isoline points (not physically realizable under the
-  # fitted marginals) before calculating densities
   keep <- is.finite(x_vals) & is.finite(y_vals)
+
   x_vals <- x_vals[keep]
   y_vals <- y_vals[keep]
   U_keep <- contour_uv$U[keep]
   V_keep <- contour_uv$V[keep]
 
-  # Clip physically impossible
+  # Enforce physical bounds if needed
   x_vals <- pmax(x_vals, 0)
   y_vals <- pmax(y_vals, 0)
 
-  # Compute marginal densities
+  # -----------------------------------------
+  # Compute joint PDF along isoline
+  # -----------------------------------------
   fx <- get_marginal_density(marg_x, x_vals)
   fy <- get_marginal_density(marg_y, y_vals)
 
-  # Compute copula density (output is in copula space)
-  cuv <- VineCopula::BiCopPDF(U_keep, V_keep, family = cop$family,
-                            par = cop$par, par2 = cop$par2)
+  # Final hard clipping for numerical safety
+  U_keep <- pmin(pmax(U_keep, 1e-10), 1 - 1e-10)
+  V_keep <- pmin(pmax(V_keep, 1e-10), 1 - 1e-10)
 
-  # Joint PDF (in physical space) = copula density * marginal densities
+  cuv <- VineCopula::BiCopPDF(
+    U_keep, V_keep,
+    family = cop$family,
+    par = cop$par,
+    par2 = cop$par2
+  )
+
   joint_pdf <- cuv * fx * fy
 
-  rp_contour <- data.frame(x = x_vals, y = y_vals, pdf = joint_pdf)
+  rp_contour <- data.frame(
+    x = x_vals,
+    y = y_vals,
+    pdf = joint_pdf
+  )
 
-  # Ensure at least 25 points
   if (nrow(rp_contour) < 25) {
-    warning("Contour has fewer than 25 points. Consider reducing delta in joint.curvesCOP or checking data.")
+    warning("Contour has fewer than 25 points.")
   }
 
   return(rp_contour)

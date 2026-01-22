@@ -14,6 +14,10 @@ data_catalog_yml = r'Z:\Data-Expansion\users\lelise\data\data_catalog_SFINCS_Car
 yml_base = r'Z:\Data-Expansion\users\lelise\data\data_catalog_BASE_Carolinas.yml'
 cat = hydromt.DataCatalog(data_libs=[data_catalog_yml, yml_base])
 
+file = r'Z:\Data-Expansion\users\lelise\adcirc_wl_sept2024.nc'
+wl = cat.get_geodataset(file)
+test = xr.open_dataset(file)
+
 # Read in the data catalog to get the model and basin geom
 basins = cat.get_geodataframe(data_like=r'Z:\Data-Expansion\users\lelise\projects\Carolinas_SFINCS\Chapter2_PGW\sfincs\03_OBS\analysis_final\downscale_test\masks\huc6_basins.shp')
 basins = basins.to_crs(epsg=32617)

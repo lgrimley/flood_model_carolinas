@@ -106,21 +106,6 @@ get_best_fit <- function(data) {
 }
 
 
-# -----------------------------------------
-# Transform data to uniform using fitted marginal
-# -----------------------------------------
-to_uniform <- function(data, marginal_fit) {
-  cdf_fun <- marginal_fit$cdf
-  params  <- as.list(marginal_fit$fit$estimate)
-
-  u <- do.call(cdf_fun, c(list(q = data), params))
-
-  # Numerical safety (avoid exactly 0 or 1)
-  eps <- 1e-10
-  pmin(pmax(u, eps), 1 - eps)
-}
-
-
 # ---------------------------------------------------
 # Function to fit marginals and a copula for x and y
 # ---------------------------------------------------
@@ -138,14 +123,8 @@ fit_marginals_and_copula <- function(x, y, familyset = c(0,1,2,3,4,5,6), indepte
   # ----------------------------
   # Convert to pseudo-observations
   # ----------------------------
-  # u_emp <- pobs(x)
-  # v_emp <- pobs(y)
-
-  # ----------------------------
-  # Transform data using fitted marginals
-  # ----------------------------
-  u <- to_uniform(x, marg_x)
-  v <- to_uniform(y, marg_y)
+  u <- pobs(x)
+  v <- pobs(y)
 
   # ----------------------------
   # Fit best copula (existing behavior)
@@ -205,8 +184,7 @@ fit_marginals_and_copula <- function(x, y, familyset = c(0,1,2,3,4,5,6), indepte
   list(
     marginals = list(x = marg_x, y = marg_y),
     copula = best_cop,
-    copula_all = copula_df,
-    uniforms = list(u = u, v = v)
+    copula_all = copula_df
   )
 
 }

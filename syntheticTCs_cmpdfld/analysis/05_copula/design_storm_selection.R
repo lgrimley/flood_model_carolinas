@@ -1,15 +1,14 @@
 # Global settings
 setwd('C:\\Users\\lelise\\Documents\\GitHub\\flood_model_carolinas\\syntheticTCs_cmpdfld\\analysis\\05_copula')
 source("fit_marginals_and_copula.R")
-source("joint_return_period_contour.R")
+source("joint_return_period_contour_v2.R")
 library(ggplot2)
 library(fields)
 library(dplyr)
 library(akima)
 library(scales)
 
-densify_rp_contour <- function(rp_contour, n_points = 500,
-                               normalize_pdf = TRUE) {
+densify_rp_contour <- function(rp_contour, n_points = 500, normalize_pdf = TRUE) {
   # Densify a joint return-period contour along its arc length
   if(!all(c("x","y") %in% names(rp_contour))) {
     stop("rp_contour must contain columns 'x' and 'y'")
@@ -48,12 +47,12 @@ densify_rp_contour <- function(rp_contour, n_points = 500,
 
 
 subset_closest_to_isoline <- function(df, rp_contour, result, xvar, yvar,
-                                      n_closest = 5) {
+                                      n_closest = 5, prob_threshold=0.9) {
 
   # Ensure unique IDs
   if(!"TC_ID" %in% names(df)) df$TC_ID <- seq_len(nrow(df))
 
-  # Scale data
+  # Scale data using the mean and stdev
   x_mean <- mean(df[[xvar]], na.rm = TRUE)
   x_sd   <- sd(df[[xvar]], na.rm = TRUE)
   y_mean <- mean(df[[yvar]], na.rm = TRUE)
@@ -65,14 +64,14 @@ subset_closest_to_isoline <- function(df, rp_contour, result, xvar, yvar,
   rp_contour_scaled$x <- (rp_contour$x - x_mean) / x_sd
   rp_contour_scaled$y <- (rp_contour$y - y_mean) / y_sd
 
-  # Distance to isoline
+  # Calculate the distance of each point to the isoline
   D_iso <- fields::rdist(
     as.matrix(df_scaled[, c(xvar, yvar)]),
     as.matrix(rp_contour_scaled[, c("x", "y")])
   )
   df$dist_isoline <- apply(D_iso, 1, min)
 
-  # Top N closest to isoline
+  # selec the top N closest to isoline
   df_closest <- df %>%
     dplyr::arrange(dist_isoline) %>%
     dplyr::slice(1:n_closest)
@@ -85,7 +84,7 @@ subset_closest_to_isoline <- function(df, rp_contour, result, xvar, yvar,
   df_closest$iso_x <- rp_contour$x[nearest_idx]
   df_closest$iso_y <- rp_contour$y[nearest_idx]
 
-  # Marginal return periods
+  # get the point that is the closest to the value of the marginals return period
   df_closest$return_period_x <- sapply(df_closest[[xvar]], function(x) {
     1 / (1 - do.call(result$marginals$x$cdf,
                      c(list(q = x), as.list(result$marginals$x$fit$estimate))))
@@ -95,7 +94,7 @@ subset_closest_to_isoline <- function(df, rp_contour, result, xvar, yvar,
                      c(list(q = y), as.list(result$marginals$y$fit$estimate))))
   })
 
-  # Joint return period
+  # get the point that is the closest to the joint return period
   u <- sapply(df_closest[[xvar]], function(x) do.call(result$marginals$x$cdf,
                                                       c(list(q = x), as.list(result$marginals$x$fit$estimate))))
   v <- sapply(df_closest[[yvar]], function(y) do.call(result$marginals$y$cdf,
@@ -106,15 +105,15 @@ subset_closest_to_isoline <- function(df, rp_contour, result, xvar, yvar,
                                          par2 = result$copula$par2)
   df_closest$joint_return_period <- 1 / joint_prob
 
-  # --- Most likely based on combined score (distance + PDF) ---
+  # Most likely based on combined score (distance + PDF)
   epsilon <- 1e-6
   df_closest$likelihood_score <- df_closest$scaled_pdf / (df_closest$dist_isoline + epsilon)
   most_likely_idx <- which.max(df_closest$likelihood_score)
   df_closest$most_likely_event <- FALSE
   df_closest$most_likely_event[most_likely_idx] <- TRUE
 
-  # --- New: closest to high-PDF region (>0.70) ---
-  high_pdf_points <- rp_contour[rp_contour$scaled_pdf >= 0.70, c("x","y")]
+  # Closest point in the high probability region (>prob_threshold)
+  high_pdf_points <- rp_contour[rp_contour$scaled_pdf >= prob_threshold, c("x","y")]
   if(nrow(high_pdf_points) > 0){
     D_highpdf <- fields::rdist(as.matrix(df_closest[, c(xvar, yvar)]),
                                as.matrix(high_pdf_points))
@@ -138,8 +137,8 @@ variable_pairs <- list(
   list(xvar = 'meanMaxWS', yvar = 'MeanTotPrecipMM', zvar = 'Total_Area_sqkm_RP', climate='ncep')
 )
 
-basins <- c('Neuse', 'Domain','OnslowBay','Pamlico','LowerPeeDee','CapeFear')
-rps <- c(5, 10, 25, 50, 100, 500)
+basins <- c('CapeFear')#, 'Domain','OnslowBay','Pamlico','LowerPeeDee','Neuse')
+rps <- c(100)
 
 all_top_events <- NULL
 for (basin in basins) {
@@ -168,10 +167,28 @@ for (basin in basins) {
     for (target_rp in rps){
 
       # Compute RP contour and PDF
-      rp_contour <- joint_return_period_contour(result, target_rp = target_rp, lambda = 3.38)
+      rp_contour <- joint_return_period_contour_v2(result, target_rp = target_rp,
+                                                   lambda = 3.38)
+
+
+      # Basic scatter + line plot
+      ggplot(rp_contour, aes(x = x, y = y)) +
+        geom_line(color = "blue", size = 1) +           # contour line
+        geom_point(aes(color = pdf), size = 2) +        # joint PDF along contour
+        scale_color_viridis_c(option = "plasma") +
+        labs(
+          title = "AND Joint Return-Period Contour",
+          subtitle = paste0("Return period = 100 years"),
+          #x = paste0("X: ", fitted$marginals$x$fit$distname),
+          #y = paste0("Y: ", fitted$marginals$y$fit$distname),
+          color = "Joint PDF"
+        ) +
+        theme_minimal(base_size = 14)
+
 
       # Densify and normalize the RP contour
-      rp_contour_dense <- densify_rp_contour(rp_contour, n_points = 500, normalize_pdf = TRUE)
+      rp_contour_dense <- densify_rp_contour(rp_contour, n_points = 500,
+                                             normalize_pdf = TRUE)
 
       # Now get the other points that are close to the line
       top_events = subset_closest_to_isoline(
@@ -180,7 +197,8 @@ for (basin in basins) {
         result = result,
         xvar = xvar,
         yvar = yvar,
-        n_closest = 5
+        n_closest = 10,
+        prob_threshold=0.95
       )
 
       # Add metadata columns
@@ -212,15 +230,18 @@ for (basin in basins) {
         geom_text(data = top_events, aes_string(x = xvar, y = yvar, label = "TC_ID"),
                   vjust = -1, hjust = 0.5, size = 3.5, fontface = "bold") +
 
-        # Highlight the most likely storm with a gold star and black border
-        geom_point(data = top_events %>% filter(most_likely_event),
-                   aes_string(x = xvar, y = yvar),
-                   color = "purple", fill = "purple", shape = 8, size = 5, stroke = 1.5) +
+        # Highlight the most likely by distance and PDF
+        # geom_point(data = top_events %>% filter(most_likely_event),
+        #            aes_string(x = xvar, y = yvar),
+        #            color = "purple", fill = "purple",
+        #            shape = 8, size = 5, stroke = 1.5) +
 
-        # Highlight the closest to high-PDF region (green triangle)
+        # Closest point in the high probability region (>prob_threshold)
         geom_point(data = top_events %>% filter(closest_to_highpdf),
                    aes_string(x = xvar, y = yvar),
-                   color = "green4", fill = "green4", shape = 17, size = 4, stroke = 1.2) +
+                   color = "green4", fill = "green4",
+                   shape = 17, size = 4, stroke = 1.2,
+                   label='Most Likely') +
 
         # Divergent color scale for PDF along the contour
         scale_color_gradient2(
@@ -236,12 +257,11 @@ for (basin in basins) {
         theme(legend.position = "right")
 
 
-
         output_filepath <- file.path(outputdir, paste(basin, target_rp, xvar, yvar, ".png", sep='_'))
         ggsave(output_filepath, width = 6,height = 5, dpi = 300, bg='white')
 
+      }
     }
-  }
 }
 
 write.csv(all_top_events, file = file.path(outputdir, "all_top_events.csv"), row.names = FALSE)
